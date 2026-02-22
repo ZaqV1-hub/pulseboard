@@ -1,0 +1,285 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseBoard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section class="login-screen" id="loginScreen">
+    <form class="login-card" id="loginForm">
+      <h1>PULSEBOARD</h1>
+      <p class="muted">Entre para acessar seu painel</p>
+      <label>Email<input id="loginUser" type="email" placeholder="Ex: voce@email.com" required></label>
+      <label>Senha<input id="loginPass" type="password" placeholder="Digite sua senha" required></label>
+      <button class="btn" type="submit">Entrar</button>
+      <p class="login-error" id="loginError"></p>
+      </form>
+  </section>
+
+  <div class="app hidden" id="appShell">
+    <aside class="sidebar">
+      <h1 class="brand">PULSEBOARD</h1>
+      <nav class="menu" id="menu"></nav>
+    </aside>
+
+    <main class="content">
+      <header class="header card">
+        <div>
+          <p class="muted">Painel pessoal</p>
+          <h2 id="headerTitle">Dashboard</h2>
+        </div>
+        <div class="header-right">
+          <span class="chip" id="todayChip"></span>
+          <button class="btn ghost" id="themeToggleBtn" type="button">Tema</button>
+          <button class="btn ghost" id="logoutBtn" type="button">Sair</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-dashboard">
+        <div class="grid two">
+          <article class="card">
+            <div class="section-head">
+              <h3>Para onde minha renda vai</h3>
+              <select id="dashMonthFilter"></select>
+            </div>
+            <canvas id="dashPieChart"></canvas>
+            <div class="summary-row">
+              <span>Total gasto: <strong id="dashTotalExpense">R$ 0,00</strong></span>
+              <span>Maior impacto: <strong id="dashTopCategory">-</strong></span>
+            </div>
+            <div id="dashPieLegend" class="legend-list"></div>
+          </article>
+
+          <article class="card">
+            <div class="section-head">
+              <h3>Tarefas do Dia</h3>
+              <span id="dashTaskCounter" class="muted">0/0 concluídas</span>
+            </div>
+            <form id="dashTaskForm" class="inline-form">
+              <input id="dashTaskInput" type="text" placeholder="Criar tarefa rápida" required>
+              <button class="btn" type="submit">Adicionar</button>
+              </form>
+            <div id="dashTaskList" class="list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-jarvis">
+        <article class="card jarvis-chat-card">
+          <h3>Jarvis</h3>
+          <div id="jarvisHistory" class="chat-thread"></div>
+          <form id="jarvisForm" class="chat-form">
+            <input id="jarvisInput" type="text" placeholder="Digite sua mensagem" required>
+            <button class="btn" type="submit">Enviar</button>
+            </form>
+        </article>
+      </section>
+
+      <section class="view" id="view-habits">
+        <div class="split">
+          <article class="card">
+            <div class="section-head">
+              <h3>Tarefas do Dia</h3>
+              <input id="habitTaskDateFilter" type="date">
+            </div>
+            <form id="habitTaskForm" class="inline-form">
+              <input id="habitTaskInput" type="text" placeholder="Adicionar tarefa" required>
+              <button class="btn" type="submit">Adicionar</button>
+              </form>
+            <div id="habitTaskList" class="list"></div>
+            <div class="calendar-nav">
+              <button class="btn ghost" type="button" id="habitCalendarPrev">Dia anterior</button>
+              <span id="habitCalendarLabel"></span>
+              <button class="btn ghost" type="button" id="habitCalendarNext">Dia seguinte</button>
+            </div>
+          </article>
+
+          <article class="card">
+            <h3>Novo hábito</h3>
+            <form id="habitForm" class="inline-form">
+              <input id="habitName" type="text" placeholder="Nome do hábito" required>
+              <input id="habitGoal" type="number" min="1" max="31" value="20" required>
+              <button class="btn" type="submit">Adicionar</button>
+              </form>
+            <div class="table-wrap">
+              <table class="habit-grid">
+                <thead id="habitGridHead"></thead>
+                <tbody id="habitGridBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+
+        <article class="card">
+          <h3>Conclusões por dia</h3>
+          <canvas id="habitLineChart"></canvas>
+        </article>
+      </section>
+
+      <section class="view" id="view-health">
+        <article class="card">
+          <div class="section-head">
+            <h3>Gráfico geral</h3>
+            <select id="healthPeriodFilter">
+              <option value="7">7 dias</option>
+              <option value="30">30 dias</option>
+              <option value="month">Mês atual</option>
+            </select>
+          </div>
+          <canvas id="healthChart"></canvas>
+        </article>
+
+        <div class="grid two">
+          <article class="card">
+            <h3>Metas de saúde</h3>
+            <form id="healthGoalForm" class="grid-form two-col">
+              <label>Meta de kcal<input id="goalKcal" type="number" min="0" placeholder="Ex: 2000"></label>
+              <label>Meta de sono (h)<input id="goalSleep" type="number" min="0" step="0.1" placeholder="Ex: 8"></label>
+              <label>Meta de água (L)<input id="goalWater" type="number" min="0" step="0.1" placeholder="Ex: 2.5"></label>
+              <button class="btn" type="submit">Salvar metas</button>
+            </form>
+
+            <h3 class="mt-16">Registro diário</h3>
+            <form id="healthForm" class="grid-form two-col">
+              <label>Data<input id="healthDate" type="date" required></label>
+              <label>Kcal consumidas<input id="healthKcal" type="number" min="0" required></label>
+              <label>Horas dormidas<input id="healthSleep" type="number" min="0" max="24" step="0.1" required></label>
+              <label>Litros de água<input id="healthWater" type="number" min="0" max="12" step="0.1" required></label>
+              <button class="btn" type="submit">Salvar</button>
+              </form>
+          </article>
+
+          <article class="card">
+            <h3>Indicadores</h3>
+            <div class="list" id="healthIndicators"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-finance">
+        <div class="subtabs">
+          <button class="subtab active" data-fin-view="analytics" type="button">Finanças - Página 1</button>
+          <button class="subtab" data-fin-view="ops" type="button">Finanças - Página 2</button>
+        </div>
+
+        <div id="financeAnalytics" class="fin-view active">
+          <article class="card">
+            <div class="section-head">
+              <h3>Análise visual</h3>
+              <div class="inline-actions">
+                <select id="financePeriodType"><option value="month">Mês</option><option value="year">Ano</option><option value="custom">Personalizado</option></select>
+                <input id="financeMonthFilter" type="month">
+                <input id="financeYearFilter" type="number" min="2000" max="2100">
+                <input id="financeCustomStart" type="date">
+                <input id="financeCustomEnd" type="date">
+              </div>
+            </div>
+            <canvas id="financePieChart"></canvas>
+            <div class="grid four compact">
+              <div class="metric"><p>Total entradas</p><strong id="finTotalIncome">R$ 0,00</strong></div>
+              <div class="metric"><p>Total saídas</p><strong id="finTotalExpense">R$ 0,00</strong></div>
+              <div class="metric"><p>Total saldo</p><strong id="finTotalBalance">R$ 0,00</strong></div>
+              <div class="metric"><p>Maior categoria</p><strong id="finTopCategory">-</strong></div>
+            </div>
+            <div id="finPieLegend" class="legend-list"></div>
+          </article>
+        </div>
+
+        <div id="financeOps" class="fin-view">
+          <div class="grid two">
+            <article class="card">
+              <h3>Resumo rápido</h3>
+              <div class="list" id="financeQuickSummary"></div>
+            </article>
+            <article class="card">
+              <h3>Novo lançamento</h3>
+              <form id="txForm" class="grid-form two-col">
+                <label>Data<input id="txDate" type="date" required></label>
+                <label>Tipo<select id="txType"><option value="income">Entrada</option><option value="expense">Saída</option><option value="investment">Investimento</option></select></label>
+                <label>Categoria<select id="txCategory" required></select></label>
+                <label>Valor<input id="txAmount" type="number" min="0.01" step="0.01" required></label>
+                <label class="full">Observação<input id="txNote" type="text"></label>
+                <button class="btn" type="submit">Registrar</button>
+                </form>
+            </article>
+          </div>
+
+          <article class="card">
+            <h3>Orçamento por área da vida</h3>
+            <form id="budgetForm" class="inline-form">
+              <input id="budgetArea" type="text" placeholder="Área" required>
+              <input id="budgetPlanned" type="number" min="0.01" step="0.01" placeholder="Planejado" required>
+              <button class="btn" type="submit">Salvar</button>
+              </form>
+            <div class="table-wrap"><table><thead><tr><th>Área</th><th>Planejado</th><th>Gasto</th><th>Saldo</th><th>Progresso</th><th>Ações</th></tr></thead><tbody id="budgetTable"></tbody></table></div>
+          </article>
+
+          <article class="card">
+            <h3>Contas mensais</h3>
+            <form id="billForm" class="grid-form two-col">
+              <label>Nome da conta<input id="billName" type="text" required></label>
+              <label>Categoria<select id="billCategory" required></select></label>
+              <label>Valor<input id="billAmount" type="number" min="0.01" step="0.01" required></label>
+              <label>Dia da conta<input id="billDueDay" type="number" min="1" max="31" required></label>
+              <button class="btn" type="submit">Adicionar conta</button>
+              </form>
+            <div class="table-wrap"><table><thead><tr><th>Conta</th><th>Categoria</th><th>Valor</th><th>Dia da conta</th><th>Status</th><th>Pago em</th><th>Ações</th></tr></thead><tbody id="billTable"></tbody></table></div>
+          </article>
+
+          <article class="card">
+            <div class="section-head">
+              <h3>Histórico</h3>
+              <div class="inline-actions">
+                <input id="txFilterStart" type="date">
+                <input id="txFilterEnd" type="date">
+                <input id="txFilterCategory" type="text" placeholder="Categoria">
+                <select id="txFilterType"><option value="all">Todos</option><option value="income">Entrada</option><option value="expense">Saída</option><option value="investment">Investimento</option></select>
+              </div>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th>Valor</th><th>Observação</th><th>Ações</th></tr></thead><tbody id="txTable"></tbody></table></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-journal">
+        <article class="card">
+          <h3>Diário</h3>
+          <p class="muted">Data selecionada: <strong id="journalDateLabel"></strong></p>
+          <form id="journalForm" class="stack-form">
+            <label>Dia da entrada<input id="journalDateInput" type="date"></label>
+            <textarea id="journalText" rows="12" placeholder="Escreva seu dia..."></textarea>
+            <button class="btn" type="submit">Salvar entrada</button>
+          </form>
+          <div class="list" id="journalEntriesList"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-settings">
+        <article class="card">
+          <h3>Configurações</h3>
+          <form id="settingsForm" class="grid-form two-col">
+            <label>Nome<input id="settingsName" type="text" required></label>
+            <label>Email<input id="settingsEmail" type="email" required></label>
+            <label>Nova senha<input id="settingsPassword" type="password" placeholder="Deixe vazio para manter"></label>
+            <label>Tema<select id="settingsTheme"><option value="light">Claro</option><option value="dark">Escuro</option></select></label>
+            <button class="btn" type="submit">Salvar configurações</button>
+            <button class="btn danger" id="deleteAccountBtn" type="button">Excluir conta</button>
+          </form>
+          <p id="settingsMessage" class="muted"></p>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+
+
+
