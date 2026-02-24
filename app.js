@@ -9,7 +9,8 @@ const MENU_ITEMS = [
   { id: "health", label: "Saúde" },
   { id: "finance", label: "Finanças" },
   { id: "journal", label: "Diário" },
-  { id: "settings", label: "Configurações" }
+  { id: "settings", label: "Configurações" },
+  { id: "users", label: "Usuários", adminOnly: true }
 ];
 
 const CATEGORY_BY_TYPE = {
@@ -48,8 +49,14 @@ const refs = {
   dashTaskList: document.getElementById("dashTaskList"),
   dashTaskCounter: document.getElementById("dashTaskCounter"),
 
+  taskEditModal: document.getElementById("taskEditModal"),
+  taskEditForm: document.getElementById("taskEditForm"),
+  taskEditTitle: document.getElementById("taskEditTitle"),
+  taskEditCancelBtn: document.getElementById("taskEditCancelBtn"),
+
   jarvisForm: document.getElementById("jarvisForm"),
   jarvisInput: document.getElementById("jarvisInput"),
+  jarvisSendBtn: document.getElementById("jarvisSendBtn"),
   jarvisHistory: document.getElementById("jarvisHistory"),
 
   habitTaskDateFilter: document.getElementById("habitTaskDateFilter"),
@@ -129,7 +136,59 @@ const refs = {
   settingsPassword: document.getElementById("settingsPassword"),
   settingsTheme: document.getElementById("settingsTheme"),
   deleteAccountBtn: document.getElementById("deleteAccountBtn"),
-  settingsMessage: document.getElementById("settingsMessage")
+  settingsMessage: document.getElementById("settingsMessage"),
+
+  adminUserForm: document.getElementById("adminUserForm"),
+  adminUserModal: document.getElementById("adminUserModal"),
+  adminOpenCreateBtn: document.getElementById("adminOpenCreateBtn"),
+  adminUserCancelBtn: document.getElementById("adminUserCancelBtn"),
+  adminUserEditModal: document.getElementById("adminUserEditModal"),
+  adminUserEditForm: document.getElementById("adminUserEditForm"),
+  adminEditName: document.getElementById("adminEditName"),
+  adminEditEmail: document.getElementById("adminEditEmail"),
+  adminEditPassword: document.getElementById("adminEditPassword"),
+  adminEditRole: document.getElementById("adminEditRole"),
+  adminEditCancelBtn: document.getElementById("adminEditCancelBtn"),
+  adminUserName: document.getElementById("adminUserName"),
+  adminUserEmail: document.getElementById("adminUserEmail"),
+  adminUserPassword: document.getElementById("adminUserPassword"),
+  adminUserRole: document.getElementById("adminUserRole"),
+  adminUserMessage: document.getElementById("adminUserMessage"),
+  adminUsersTable: document.getElementById("adminUsersTable"),
+
+  habitEditModal: document.getElementById("habitEditModal"),
+  habitEditForm: document.getElementById("habitEditForm"),
+  habitEditName: document.getElementById("habitEditName"),
+  habitEditGoal: document.getElementById("habitEditGoal"),
+  habitEditCancelBtn: document.getElementById("habitEditCancelBtn"),
+
+  txEditModal: document.getElementById("txEditModal"),
+  txEditForm: document.getElementById("txEditForm"),
+  txEditDate: document.getElementById("txEditDate"),
+  txEditType: document.getElementById("txEditType"),
+  txEditCategory: document.getElementById("txEditCategory"),
+  txEditAmount: document.getElementById("txEditAmount"),
+  txEditNote: document.getElementById("txEditNote"),
+  txEditCancelBtn: document.getElementById("txEditCancelBtn"),
+
+  budgetEditModal: document.getElementById("budgetEditModal"),
+  budgetEditForm: document.getElementById("budgetEditForm"),
+  budgetEditArea: document.getElementById("budgetEditArea"),
+  budgetEditPlanned: document.getElementById("budgetEditPlanned"),
+  budgetEditCancelBtn: document.getElementById("budgetEditCancelBtn"),
+
+  billEditModal: document.getElementById("billEditModal"),
+  billEditForm: document.getElementById("billEditForm"),
+  billEditName: document.getElementById("billEditName"),
+  billEditCategory: document.getElementById("billEditCategory"),
+  billEditAmount: document.getElementById("billEditAmount"),
+  billEditDueDay: document.getElementById("billEditDueDay"),
+  billEditCancelBtn: document.getElementById("billEditCancelBtn"),
+
+  confirmModal: document.getElementById("confirmModal"),
+  confirmMessage: document.getElementById("confirmMessage"),
+  confirmCancelBtn: document.getElementById("confirmCancelBtn"),
+  confirmOkBtn: document.getElementById("confirmOkBtn")
 };
 
 const chartInstances = {};
@@ -139,8 +198,24 @@ const currentMonthKey = todayKey.slice(0, 7);
 
 const state = loadState();
 let authToken = "";
-let apiBase = "http://localhost:8787";
+const LOCAL_API_URL = "http://localhost:8787";
+const PROD_API_URL = "https://pulseboard-ai.onrender.com";
+const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+let apiBase = String(window.API_URL || (isLocalhost ? LOCAL_API_URL : PROD_API_URL)).replace(/\/+$/, "");
 let saveTimer;
+let jarvisSending = false;
+let editingHabitId = "";
+let editingTxId = "";
+let editingBudgetId = "";
+let editingBillId = "";
+let editingTaskId = "";
+let editingAdminUserId = 0;
+let confirmActionHandler = null;
+let confirmBusy = false;
+const THEME_ORDER = ["light", "dark", "pastel-pink", "pastel-green", "pastel-blue", "pastel-purple", "black-red"];
+let currentUser = null;
+let adminUsers = [];
+let currentStateOwnerId = 0;
 bootstrap();
 
 async function bootstrap() {
@@ -170,13 +245,16 @@ async function bootstrap() {
   hydrateMonthFilters();
 
   const session = loadSession();
+  updateJarvisSendState();
+
   if (session?.token) {
     authToken = session.token;
     try {
       const me = await apiRequest("/api/auth/me");
       if (me?.user) {
-        await pullRemoteState();
         applyLoggedUser(me.user);
+        await pullRemoteState();
+        if (isAdminUser()) await loadAdminUsers();
         showApp();
       } else {
         showLogin();
@@ -204,8 +282,14 @@ function bindEvents() {
   refs.dashTaskForm.addEventListener("submit", onTaskAddToday);
   refs.dashTaskList.addEventListener("click", onTaskActionClick);
   refs.habitTaskList.addEventListener("click", onTaskActionClick);
+  refs.taskEditForm.addEventListener("submit", onTaskEditSubmit);
+  refs.taskEditCancelBtn.addEventListener("click", closeTaskEditModal);
+  refs.taskEditModal.addEventListener("click", (event) => {
+    if (event.target === refs.taskEditModal) closeTaskEditModal();
+  });
 
   refs.jarvisForm.addEventListener("submit", onJarvisSubmit);
+  refs.jarvisInput.addEventListener("input", updateJarvisSendState);
 
   refs.habitTaskDateFilter.addEventListener("change", () => {
     state.ui.habitTaskDate = refs.habitTaskDateFilter.value || todayKey;
@@ -268,13 +352,79 @@ function bindEvents() {
   });
 
   refs.settingsForm.addEventListener("submit", onSettingsSubmit);
+  refs.adminUserForm?.addEventListener("submit", onAdminUserSubmit);
+  refs.adminUsersTable?.addEventListener("click", onAdminUserActionClick);
+  refs.adminOpenCreateBtn?.addEventListener("click", openAdminUserModal);
+  refs.adminUserCancelBtn?.addEventListener("click", closeAdminUserModal);
+  refs.adminUserModal?.addEventListener("click", (event) => {
+    if (event.target === refs.adminUserModal) closeAdminUserModal();
+  });
+  refs.adminUserEditForm?.addEventListener("submit", onAdminUserEditSubmit);
+  refs.adminEditCancelBtn?.addEventListener("click", closeAdminUserEditModal);
+  refs.adminUserEditModal?.addEventListener("click", (event) => {
+    if (event.target === refs.adminUserEditModal) closeAdminUserEditModal();
+  });
 
-  refs.settingsTheme.addEventListener("change", () => applyTheme(refs.settingsTheme.value));
+  refs.settingsTheme.addEventListener("change", () => {
+    state.settings.theme = refs.settingsTheme.value;
+    applyTheme(state.settings.theme);
+    renderAll();
+    persist();
+  });
   refs.deleteAccountBtn.addEventListener("click", onDeleteAccount);
+
+  refs.habitEditForm.addEventListener("submit", onHabitEditSubmit);
+  refs.habitEditCancelBtn.addEventListener("click", closeHabitEditModal);
+  refs.habitEditModal.addEventListener("click", (event) => {
+    if (event.target === refs.habitEditModal) closeHabitEditModal();
+  });
+
+  refs.txEditForm.addEventListener("submit", onTxEditSubmit);
+  refs.txEditCancelBtn.addEventListener("click", closeTxEditModal);
+  refs.txEditModal.addEventListener("click", (event) => {
+    if (event.target === refs.txEditModal) closeTxEditModal();
+  });
+  refs.txEditType.addEventListener("change", hydrateTxEditCategorySelect);
+
+  refs.budgetEditForm.addEventListener("submit", onBudgetEditSubmit);
+  refs.budgetEditCancelBtn.addEventListener("click", closeBudgetEditModal);
+  refs.budgetEditModal.addEventListener("click", (event) => {
+    if (event.target === refs.budgetEditModal) closeBudgetEditModal();
+  });
+
+  refs.billEditForm.addEventListener("submit", onBillEditSubmit);
+  refs.billEditCancelBtn.addEventListener("click", closeBillEditModal);
+  refs.billEditModal.addEventListener("click", (event) => {
+    if (event.target === refs.billEditModal) closeBillEditModal();
+  });
+
+  refs.confirmCancelBtn.addEventListener("click", closeConfirmModal);
+  refs.confirmOkBtn.addEventListener("click", async () => {
+    if (confirmBusy) return;
+    if (typeof confirmActionHandler !== "function") {
+      closeConfirmModal();
+      return;
+    }
+    try {
+      confirmBusy = true;
+      refs.confirmOkBtn.disabled = true;
+      refs.confirmOkBtn.textContent = "Confirmando...";
+      await confirmActionHandler();
+      closeConfirmModal();
+    } finally {
+      confirmBusy = false;
+      refs.confirmOkBtn.disabled = false;
+      refs.confirmOkBtn.textContent = "Confirmar";
+    }
+  });
+  refs.confirmModal.addEventListener("click", (event) => {
+    if (event.target === refs.confirmModal) closeConfirmModal();
+  });
 }
 
 async function onLoginSubmit(event) {
   event.preventDefault();
+  clearTimeout(saveTimer);
   const email = refs.loginUser.value.trim();
   const password = refs.loginPass.value;
 
@@ -297,8 +447,11 @@ async function onLoginSubmit(event) {
     authToken = data.token;
     saveSession({ token: data.token, user: data.user || null });
     refs.loginError.textContent = "";
+    hydrateStateFromRemote(defaultState());
+    currentStateOwnerId = Number(data?.user?.id || 0);
     await pullRemoteState();
     applyLoggedUser(data.user || null);
+    if (isAdminUser()) await loadAdminUsers();
     refs.loginForm.reset();
     showApp();
     renderAll();
@@ -308,19 +461,186 @@ async function onLoginSubmit(event) {
 }
 
 function onLogout() {
+  clearTimeout(saveTimer);
   localStorage.removeItem(SESSION_KEY);
   authToken = "";
+  currentUser = null;
+  currentStateOwnerId = 0;
+  adminUsers = [];
   if (refs.settingsMessage) refs.settingsMessage.textContent = "";
+  buildMenu();
   showLogin();
 }
 
 function applyLoggedUser(user) {
   if (!user) return;
+  currentUser = {
+    id: Number(user.id || 0),
+    name: String(user.name || ""),
+    email: String(user.email || ""),
+    role: String(user.role || "user")
+  };
+  currentStateOwnerId = Number(user.id || 0);
   state.settings.name = String(user.name || state.settings.name || "");
   state.settings.email = String(user.email || state.settings.email || "");
 
   refs.settingsName.value = state.settings.name;
   refs.settingsEmail.value = state.settings.email;
+  if (state.ui.activeView === "users" && !isAdminUser()) {
+    state.ui.activeView = "dashboard";
+  }
+  buildMenu();
+}
+
+function isAdminUser() {
+  return currentUser?.role === "admin";
+}
+
+function openAdminUserModal() {
+  if (!isAdminUser()) return;
+  refs.adminUserForm?.reset();
+  if (refs.adminUserRole) refs.adminUserRole.value = "user";
+  refs.adminUserModal?.classList.remove("hidden");
+}
+
+function closeAdminUserModal() {
+  refs.adminUserModal?.classList.add("hidden");
+}
+
+async function loadAdminUsers() {
+  if (!isAdminUser() || !authToken) return;
+  try {
+    const data = await apiRequest("/api/admin/users");
+    adminUsers = Array.isArray(data?.users) ? data.users : [];
+    renderUsersAdmin();
+  } catch (error) {
+    if (refs.adminUserMessage) refs.adminUserMessage.textContent = error?.message || "Não foi possível carregar usuários.";
+  }
+}
+
+async function onAdminUserSubmit(event) {
+  event.preventDefault();
+  if (!isAdminUser()) return;
+  const payload = {
+    name: refs.adminUserName.value.trim(),
+    email: refs.adminUserEmail.value.trim().toLowerCase(),
+    password: refs.adminUserPassword.value,
+    role: refs.adminUserRole.value
+  };
+
+  if (!payload.name || !payload.email || !payload.password) return;
+
+  openConfirmModal(`Criar usuário ${payload.email}?`, async () => {
+    try {
+      await apiRequest("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      refs.adminUserForm.reset();
+      refs.adminUserRole.value = "user";
+      refs.adminUserMessage.textContent = "Usuário criado com sucesso.";
+      closeAdminUserModal();
+      await loadAdminUsers();
+    } catch (error) {
+      refs.adminUserMessage.textContent = error?.message || "Não foi possível criar o usuário.";
+    }
+  });
+}
+
+async function onAdminUserActionClick(event) {
+  const editBtn = event.target.closest("button[data-admin-edit]");
+  const delBtn = event.target.closest("button[data-admin-delete]");
+  if (!isAdminUser()) return;
+
+  if (editBtn) {
+    const userId = Number(editBtn.dataset.adminEdit);
+    const current = adminUsers.find((user) => Number(user.id) === userId);
+    if (!current) return;
+    openAdminUserEditModal(current);
+    return;
+  }
+
+  if (delBtn) {
+    const userId = Number(delBtn.dataset.adminDelete);
+    const current = adminUsers.find((user) => Number(user.id) === userId);
+    if (!current) return;
+    if (Number(current.id) === Number(currentUser?.id)) {
+      refs.adminUserMessage.textContent = "Você não pode excluir o próprio usuário.";
+      return;
+    }
+    openConfirmModal(`Excluir usuário ${current.email}?`, async () => {
+      try {
+        await apiRequest(`/api/admin/users/${userId}`, { method: "DELETE" });
+        await loadAdminUsers();
+      } catch (error) {
+        refs.adminUserMessage.textContent = error?.message || "Não foi possível excluir o usuário.";
+      }
+    });
+  }
+}
+
+function openAdminUserEditModal(user) {
+  editingAdminUserId = Number(user.id || 0);
+  refs.adminEditName.value = String(user.name || "");
+  refs.adminEditEmail.value = String(user.email || "");
+  refs.adminEditPassword.value = "";
+  refs.adminEditRole.value = user.role === "admin" ? "admin" : "user";
+  refs.adminUserEditModal.classList.remove("hidden");
+}
+
+function closeAdminUserEditModal() {
+  editingAdminUserId = 0;
+  refs.adminUserEditModal.classList.add("hidden");
+}
+
+async function onAdminUserEditSubmit(event) {
+  event.preventDefault();
+  if (!isAdminUser() || !editingAdminUserId) return;
+
+  const payload = {
+    name: refs.adminEditName.value.trim(),
+    email: refs.adminEditEmail.value.trim().toLowerCase(),
+    role: refs.adminEditRole.value,
+    password: refs.adminEditPassword.value
+  };
+  if (!payload.name || !payload.email || !payload.role) return;
+
+  openConfirmModal(`Salvar alterações de ${payload.email}?`, async () => {
+    try {
+      await apiRequest(`/api/admin/users/${editingAdminUserId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+      closeAdminUserEditModal();
+      refs.adminUserMessage.textContent = "Usuário atualizado com sucesso.";
+      await loadAdminUsers();
+    } catch (error) {
+      refs.adminUserMessage.textContent = error?.message || "Não foi possível atualizar o usuário.";
+    }
+  });
+}
+
+function renderUsersAdmin() {
+  if (!refs.adminUsersTable) return;
+  if (!isAdminUser()) {
+    refs.adminUsersTable.innerHTML = "";
+    if (refs.adminUserMessage) refs.adminUserMessage.textContent = "";
+    return;
+  }
+  refs.adminUsersTable.innerHTML = adminUsers.length
+    ? adminUsers.map((user) => `
+      <tr>
+        <td>${escapeHtml(String(user.name || ""))}</td>
+        <td>${escapeHtml(String(user.email || ""))}</td>
+        <td>${user.role === "admin" ? "Administrador" : "Usuário"}</td>
+        <td>${user.createdAt ? formatDateTime(user.createdAt) : "-"}</td>
+        <td>
+          <button class="btn ghost" data-admin-edit="${user.id}" type="button">Editar</button>
+          <button class="btn danger" data-admin-delete="${user.id}" type="button">Excluir</button>
+        </td>
+      </tr>
+    `).join("")
+    : "<tr><td colspan='5' class='muted'>Sem usuários cadastrados.</td></tr>";
 }
 
 async function onSettingsSubmit(event) {
@@ -360,22 +680,31 @@ async function onSettingsSubmit(event) {
 function showLogin() {
   refs.loginScreen.classList.remove("hidden");
   refs.appShell.classList.add("hidden");
+  updateJarvisSendState();
 }
 
 function showApp() {
   refs.loginScreen.classList.add("hidden");
   refs.appShell.classList.remove("hidden");
+  updateJarvisSendState();
 }
 
 function onThemeToggle() {
-  state.settings.theme = state.settings.theme === "light" ? "dark" : "light";
+  const currentIndex = THEME_ORDER.indexOf(state.settings.theme);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % THEME_ORDER.length : 0;
+  state.settings.theme = THEME_ORDER[nextIndex];
   refs.settingsTheme.value = state.settings.theme;
   applyTheme(state.settings.theme);
+  renderAll();
   persist();
 }
 
 function buildMenu() {
-  refs.menu.innerHTML = MENU_ITEMS.map((item) => `<button class="menu-btn ${item.id === state.ui.activeView ? "active" : ""}" data-view="${item.id}" type="button">${item.label}</button>`).join("");
+  const visibleMenu = MENU_ITEMS.filter((item) => !item.adminOnly || isAdminUser());
+  if (!visibleMenu.some((item) => item.id === state.ui.activeView)) {
+    state.ui.activeView = "dashboard";
+  }
+  refs.menu.innerHTML = visibleMenu.map((item) => `<button class="menu-btn ${item.id === state.ui.activeView ? "active" : ""}" data-view="${item.id}" type="button">${item.label}</button>`).join("");
   refs.menu.querySelectorAll(".menu-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.ui.activeView = btn.dataset.view;
@@ -385,6 +714,7 @@ function buildMenu() {
 }
 
 function renderAll() {
+  buildMenu();
   renderActiveView();
   renderDashboard();
   renderJarvis();
@@ -392,13 +722,25 @@ function renderAll() {
   renderHealth();
   renderFinance();
   renderJournal();
+  renderUsersAdmin();
 }
 
 function renderActiveView() {
+  if (state.ui.activeView === "users" && !isAdminUser()) {
+    state.ui.activeView = "dashboard";
+  }
   refs.views.forEach((view) => view.classList.remove("active"));
   document.getElementById(`view-${state.ui.activeView}`)?.classList.add("active");
   refs.menu.querySelectorAll(".menu-btn").forEach((btn) => btn.classList.toggle("active", btn.dataset.view === state.ui.activeView));
   refs.headerTitle.textContent = MENU_ITEMS.find((i) => i.id === state.ui.activeView)?.label || "Dashboard";
+  if (state.ui.activeView === "jarvis") {
+    requestAnimationFrame(() => {
+      refs.jarvisHistory.scrollTop = refs.jarvisHistory.scrollHeight;
+    });
+  }
+  if (state.ui.activeView === "users" && isAdminUser()) {
+    void loadAdminUsers();
+  }
 }
 
 function hydrateMonthFilters() {
@@ -425,7 +767,7 @@ function onTaskAddToday(event) {
   event.preventDefault();
   const title = refs.dashTaskInput.value.trim();
   if (!title) return;
-  state.tasks.push({ id: crypto.randomUUID(), title, date: todayKey, done: false });
+  state.tasks.push({ id: crypto.randomUUID(), title, date: todayKey, done: false, sortOrder: nextTaskSortOrder(todayKey) });
   refs.dashTaskForm.reset();
   persistAndRender();
 }
@@ -435,24 +777,26 @@ function onTaskAddByDate(event) {
   const title = refs.habitTaskInput.value.trim();
   const date = state.ui.habitTaskDate || todayKey;
   if (!title) return;
-  state.tasks.push({ id: crypto.randomUUID(), title, date, done: false });
+  state.tasks.push({ id: crypto.randomUUID(), title, date, done: false, sortOrder: nextTaskSortOrder(date) });
   refs.habitTaskForm.reset();
   persistAndRender();
 }
 
 function renderTaskLists() {
-  const todayTasks = state.tasks.filter((task) => task.date === todayKey);
+  normalizeTaskOrder(todayKey);
+  const todayTasks = orderedTasksByDate(todayKey);
   refs.dashTaskCounter.textContent = `${todayTasks.filter((t) => t.done).length}/${todayTasks.length} concluídas`;
-  refs.dashTaskList.innerHTML = todayTasks.length ? todayTasks.map(taskItemHtml).join("") : "<p class='muted'>Sem tarefas hoje.</p>";
+  refs.dashTaskList.innerHTML = todayTasks.length ? todayTasks.map((task, index) => taskItemHtml(task, index, todayTasks.length)).join("") : "<p class='muted'>Sem tarefas hoje.</p>";
 
   const date = state.ui.habitTaskDate || todayKey;
+  normalizeTaskOrder(date);
   refs.habitTaskDateFilter.value = date;
   refs.habitCalendarLabel.textContent = formatDate(date);
-  const habitTasks = state.tasks.filter((task) => task.date === date);
-  refs.habitTaskList.innerHTML = habitTasks.length ? habitTasks.map(taskItemHtml).join("") : "<p class='muted'>Sem tarefas nesta data.</p>";
+  const habitTasks = orderedTasksByDate(date);
+  refs.habitTaskList.innerHTML = habitTasks.length ? habitTasks.map((task, index) => taskItemHtml(task, index, habitTasks.length)).join("") : "<p class='muted'>Sem tarefas nesta data.</p>";
 }
 
-function taskItemHtml(task) {
+function taskItemHtml(task, index, total) {
   return `
     <div class="list-item ${task.done ? "done" : ""}">
       <div>
@@ -460,6 +804,8 @@ function taskItemHtml(task) {
         <p class="muted">${formatDate(task.date)}</p>
       </div>
       <div class="item-actions">
+        <button class="btn ghost task-move-btn" type="button" data-task-action="move-up" data-task-id="${task.id}" ${index <= 0 ? "disabled" : ""}>↑</button>
+        <button class="btn ghost task-move-btn" type="button" data-task-action="move-down" data-task-id="${task.id}" ${index >= total - 1 ? "disabled" : ""}>↓</button>
         <button class="btn ghost" type="button" data-task-action="toggle" data-task-id="${task.id}">${task.done ? "Desfazer" : "Concluir"}</button>
         <button class="btn ghost" type="button" data-task-action="edit" data-task-id="${task.id}">Editar</button>
         <button class="btn danger" type="button" data-task-action="delete" data-task-id="${task.id}">Excluir</button>
@@ -473,13 +819,79 @@ function onTaskActionClick(event) {
   if (!button) return;
   const task = state.tasks.find((item) => item.id === button.dataset.taskId);
   if (!task) return;
-  if (button.dataset.taskAction === "toggle") task.done = !task.done;
-  if (button.dataset.taskAction === "edit") {
-    const next = prompt("Editar tarefa:", task.title);
-    if (next === null || !next.trim()) return;
-    task.title = next.trim();
+  const action = button.dataset.taskAction;
+  if (action === "toggle") task.done = !task.done;
+  if (action === "edit") {
+    openTaskEditModal(task.id);
+    return;
   }
-  if (button.dataset.taskAction === "delete") state.tasks = state.tasks.filter((t) => t.id !== task.id);
+  if (action === "move-up") {
+    moveTask(task, -1);
+    persistAndRender();
+    return;
+  }
+  if (action === "move-down") {
+    moveTask(task, 1);
+    persistAndRender();
+    return;
+  }
+  if (action === "delete") state.tasks = state.tasks.filter((t) => t.id !== task.id);
+  persistAndRender();
+}
+
+function orderedTasksByDate(date) {
+  return state.tasks
+    .filter((task) => task.date === date)
+    .sort((a, b) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
+}
+
+function nextTaskSortOrder(date) {
+  const maxOrder = state.tasks
+    .filter((task) => task.date === date)
+    .reduce((max, task) => Math.max(max, Number(task.sortOrder || 0)), 0);
+  return maxOrder + 1;
+}
+
+function normalizeTaskOrder(date) {
+  orderedTasksByDate(date).forEach((task, index) => {
+    task.sortOrder = index + 1;
+  });
+}
+
+function moveTask(task, direction) {
+  const list = orderedTasksByDate(task.date);
+  const from = list.findIndex((item) => item.id === task.id);
+  if (from < 0) return;
+  const to = from + direction;
+  if (to < 0 || to >= list.length) return;
+  const target = list[to];
+  const tmp = Number(task.sortOrder || from + 1);
+  task.sortOrder = Number(target.sortOrder || to + 1);
+  target.sortOrder = tmp;
+  normalizeTaskOrder(task.date);
+}
+
+function openTaskEditModal(taskId) {
+  const task = state.tasks.find((item) => item.id === taskId);
+  if (!task) return;
+  editingTaskId = task.id;
+  refs.taskEditTitle.value = task.title;
+  refs.taskEditModal.classList.remove("hidden");
+}
+
+function closeTaskEditModal() {
+  editingTaskId = "";
+  refs.taskEditModal.classList.add("hidden");
+}
+
+function onTaskEditSubmit(event) {
+  event.preventDefault();
+  const task = state.tasks.find((item) => item.id === editingTaskId);
+  if (!task) return;
+  const title = refs.taskEditTitle.value.trim();
+  if (!title) return;
+  task.title = title;
+  closeTaskEditModal();
   persistAndRender();
 }
 
@@ -503,13 +915,18 @@ function renderJarvis() {
     }).join("")
     : "<p class='muted'>Sem mensagens ainda.</p>";
 
-  refs.jarvisHistory.scrollTop = refs.jarvisHistory.scrollHeight;
+  requestAnimationFrame(() => {
+    refs.jarvisHistory.scrollTop = refs.jarvisHistory.scrollHeight;
+  });
 }
 
 async function onJarvisSubmit(event) {
   event.preventDefault();
   const text = refs.jarvisInput.value.trim();
-  if (!text || !authToken) return;
+  if (!text || !authToken || jarvisSending) return;
+
+  jarvisSending = true;
+  updateJarvisSendState();
 
   state.jarvisHistory.push({
     id: crypto.randomUUID(),
@@ -546,7 +963,15 @@ async function onJarvisSubmit(event) {
   }
 
   refs.jarvisInput.value = "";
+  jarvisSending = false;
+  updateJarvisSendState();
   persistAndRender();
+}
+
+function updateJarvisSendState() {
+  const hasText = refs.jarvisInput.value.trim().length > 0;
+  refs.jarvisSendBtn.disabled = !hasText || jarvisSending || !authToken;
+  refs.jarvisSendBtn.textContent = jarvisSending ? "Enviando..." : "Enviar";
 }
 
 function formatJarvisError(error) {
@@ -559,21 +984,28 @@ function formatJarvisError(error) {
     return "Chave da IA inválida ou ausente no backend.";
   }
   if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
-    return "Não foi possível conectar ao backend Jarvis (http://localhost:8787).";
+    return `Não foi possível conectar ao backend Jarvis (${apiBase}).`;
   }
-  return msg || "Falha ao chamar Jarvis remoto.";
+  if (lower.includes("status code (no body)") || lower.includes("requisição")) {
+    return "A IA recusou a requisição. Verifique modelo/permissão da chave.";
+  }
+  return msg || `Falha ao chamar Jarvis no backend (${apiBase}).`;
 }
 
 function applyJarvisActions(actions) {
   const applied = [];
+
   actions.forEach((action) => {
-    if (action?.type === "transaction") {
+    const actionType = normalize(action?.type || "");
+    const actionDate = String(action?.date || todayKey);
+
+    if (actionType === "transaction") {
       const txType = ["income", "expense", "investment"].includes(action.txType) ? action.txType : "expense";
       const amount = Number(action.amount || 0);
       if (amount > 0) {
         state.transactions.push({
           id: crypto.randomUUID(),
-          date: String(action.date || todayKey),
+          date: actionDate,
           type: txType,
           category: String(action.category || "Outros"),
           amount,
@@ -584,28 +1016,41 @@ function applyJarvisActions(actions) {
       return;
     }
 
-    if (action?.type === "habit_done") {
-      markHabitToday(String(action.name || "Hábito"));
-      applied.push(`Hábito marcado: ${String(action.name || "Hábito")}`);
+    if (["habit_done", "habit mark", "habit_mark", "marcar_habito"].includes(actionType)) {
+      const name = String(action.name || "Hábito");
+      markHabitByDate(name, actionDate);
+      applied.push(`Hábito marcado: ${name} (${formatDate(actionDate)})`);
       return;
     }
 
-    if (action?.type === "kcal") {
-      if (!state.healthLogs[todayKey]) state.healthLogs[todayKey] = { kcal: 0, sleep: 0, water: 0 };
-      state.healthLogs[todayKey].kcal = Number(action.value || 0);
-      applied.push(`Kcal: ${state.healthLogs[todayKey].kcal}`);
+    if (["habit_undo", "habit_unmark", "unmark_habit", "desmarcar_habito", "habit_remove"].includes(actionType)) {
+      const name = String(action.name || "Hábito");
+      const removed = unmarkHabitByDate(name, actionDate);
+      applied.push(removed
+        ? `Hábito desmarcado: ${name} (${formatDate(actionDate)})`
+        : `Não encontrei ${name} marcado em ${formatDate(actionDate)}.`);
       return;
     }
 
-    if (action?.type === "health") {
-      if (!state.healthLogs[todayKey]) state.healthLogs[todayKey] = { kcal: 0, sleep: 0, water: 0 };
-      if (Number(action.sleep || 0) > 0) state.healthLogs[todayKey].sleep = Number(action.sleep);
-      if (Number(action.water || 0) > 0) state.healthLogs[todayKey].water = Number(action.water);
-      applied.push("Saúde atualizada");
+    if (actionType === "kcal") {
+      const kcal = Number(action.value || 0);
+      if (kcal > 0) applied.push('Estimativa de kcal: ' + kcal + ' (sem registro automático)');
+      return;
+    }
+
+    if (actionType === "health") {
+      const sleep = Number(action.sleep || 0);
+      const water = Number(action.water || 0);
+      const details = [];
+      if (sleep > 0) details.push('sono ' + sleep + 'h');
+      if (water > 0) details.push('água ' + water + 'L');
+      if (details.length) applied.push('Estimativa de saúde: ' + details.join(' | ') + ' (sem registro automático)');
     }
   });
+
   return applied;
 }
+
 function renderHabits() {
   renderTaskLists();
   renderHabitGrid();
@@ -617,31 +1062,34 @@ function onHabitSubmit(event) {
   const name = refs.habitName.value.trim();
   const goal = Number(refs.habitGoal.value);
   if (!name || goal < 1) return;
-  state.habits.push({ id: crypto.randomUUID(), name, goal, logs: {} });
-  refs.habitForm.reset();
-  refs.habitGoal.value = "20";
-  persistAndRender();
+
+  openConfirmModal('Adicionar hábito "' + name + '" com meta ' + goal + ' dias?', () => {
+    state.habits.push({ id: crypto.randomUUID(), name, goal, logs: {} });
+    refs.habitForm.reset();
+    refs.habitGoal.value = "20";
+    persistAndRender();
+  });
 }
 
 function renderHabitGrid() {
   const days = daysOfMonth(currentMonthKey);
   const headCells = ["<th class='habit-name'>Hábito</th>", "<th class='goal-col'>Meta</th>"];
   days.forEach((d) => headCells.push(`<th class='check-col'>${Number(d.slice(-2))}</th>`));
-  headCells.push("<th>Execução</th>");
+  headCells.push("<th class='exec-col'>Execução</th>");
   headCells.push("<th class='progress-col'>Progresso</th>");
-  headCells.push("<th>Ações</th>");
+  headCells.push("<th class='action-col'>Ações</th>");
   refs.habitGridHead.innerHTML = `<tr>${headCells.join("")}</tr>`;
 
   refs.habitGridBody.innerHTML = state.habits.map((habit) => {
     const done = completedInMonthForHabit(habit, currentMonthKey);
     const ratio = habit.goal ? clamp((done / habit.goal) * 100, 0, 100) : 0;
-    const cells = [`<td class='habit-name'>${escapeHtml(habit.name)}</td>`, `<td>${habit.goal}</td>`];
+    const cells = [`<td class='habit-name'>${escapeHtml(habit.name)}</td>`, `<td class='goal-col'>${habit.goal}</td>`];
     days.forEach((date) => {
-      cells.push(`<td><input type='checkbox' data-habit-id='${habit.id}' data-date='${date}' ${habit.logs[date] ? "checked" : ""}></td>`);
+      cells.push(`<td class='check-col'><input type='checkbox' data-habit-id='${habit.id}' data-date='${date}' ${habit.logs[date] ? "checked" : ""}></td>`);
     });
-    cells.push(`<td><strong>${done}/${habit.goal}</strong></td>`);
-    cells.push(`<td><div class='progress'><div style='width:${ratio}%'></div></div></td>`);
-    cells.push(`<td><button class='btn ghost' type='button' data-habit-edit='${habit.id}'>Editar</button> <button class='btn danger' type='button' data-habit-delete='${habit.id}'>Excluir</button></td>`);
+    cells.push(`<td class='exec-col'><strong>${done}/${habit.goal}</strong></td>`);
+    cells.push(`<td class='progress-col'><div class='progress'><div style='width:${ratio}%'></div></div></td>`);
+    cells.push(`<td class='action-col'><button class='btn ghost' type='button' data-habit-edit='${habit.id}'>Editar</button> <button class='btn danger' type='button' data-habit-delete='${habit.id}'>Excluir</button></td>`);
     return `<tr>${cells.join("")}</tr>`;
   }).join("");
 }
@@ -661,27 +1109,22 @@ function onHabitGridClick(event) {
   const deleteBtn = event.target.closest("button[data-habit-delete]");
 
   if (editBtn) {
-    const habit = state.habits.find((h) => h.id === editBtn.dataset.habitEdit);
-    if (!habit) return;
-    const name = prompt("Nome do hábito:", habit.name);
-    if (name === null) return;
-    const goalRaw = prompt("Meta mensal (dias):", String(habit.goal));
-    if (goalRaw === null) return;
-    const goal = Number(goalRaw);
-    if (!name.trim() || goal < 1) return;
-    habit.name = name.trim();
-    habit.goal = goal;
-    persistAndRender();
+    openHabitEditModal(editBtn.dataset.habitEdit);
     return;
   }
 
   if (deleteBtn) {
-    state.habits = state.habits.filter((h) => h.id !== deleteBtn.dataset.habitDelete);
-    persistAndRender();
+    const habit = state.habits.find((h) => h.id === deleteBtn.dataset.habitDelete);
+    if (!habit) return;
+    openConfirmModal('Excluir hábito "' + habit.name + '"?', () => {
+      state.habits = state.habits.filter((h) => h.id !== deleteBtn.dataset.habitDelete);
+      persistAndRender();
+    });
   }
 }
 
 function renderHabitChart() {
+  const palette = getChartPalette();
   const dates = daysOfMonth(currentMonthKey);
   const labels = dates.map((d) => d.slice(-2));
   const values = dates.map((date) => state.habits.filter((h) => h.logs[date]).length);
@@ -692,10 +1135,10 @@ function renderHabitChart() {
       datasets: [{
         label: "Hábitos concluídos no dia",
         data: values,
-        borderColor: "#3d556b",
-        backgroundColor: "rgba(61,85,107,0.15)",
+        borderColor: palette.habitLine,
+        backgroundColor: palette.habitFill,
         fill: true,
-        tension: 0.25
+        tension: 0
       }]
     },
     options: baseLineOptions(false, 0, Math.max(state.habits.length, 5))
@@ -731,6 +1174,7 @@ function onHealthLogSubmit(event) {
 }
 
 function renderHealthChart() {
+  const palette = getChartPalette();
   const series = healthSeriesByPeriod(state.ui.healthPeriod);
   const goals = state.healthGoals;
   drawOrUpdateChart("health", refs.healthChart, {
@@ -738,21 +1182,21 @@ function renderHealthChart() {
     data: {
       labels: series.labels,
       datasets: [
-        { label: "Kcal", data: series.kcal, borderColor: "#d96868", yAxisID: "y", fill: false },
-        { label: "Meta Kcal", data: series.kcal.map(() => goals.kcal || null), borderColor: "#d96868", borderDash: [5, 5], yAxisID: "y", fill: false },
-        { label: "Sono", data: series.sleep, borderColor: "#4d89d8", yAxisID: "y1", fill: false },
-        { label: "Meta Sono", data: series.sleep.map(() => goals.sleep || null), borderColor: "#4d89d8", borderDash: [5, 5], yAxisID: "y1", fill: false },
-        { label: "Água", data: series.water, borderColor: "#3aa67d", yAxisID: "y1", fill: false },
-        { label: "Meta Água", data: series.water.map(() => goals.water || null), borderColor: "#3aa67d", borderDash: [5, 5], yAxisID: "y1", fill: false }
+        { label: "Kcal", data: series.kcal, borderColor: palette.kcal, yAxisID: "y", fill: false, tension: 0 },
+        { label: "Meta Kcal", data: series.kcal.map(() => goals.kcal || null), borderColor: palette.kcal, borderDash: [5, 5], yAxisID: "y", fill: false, tension: 0 },
+        { label: "Sono", data: series.sleep, borderColor: palette.sleep, yAxisID: "y1", fill: false, tension: 0 },
+        { label: "Meta Sono", data: series.sleep.map(() => goals.sleep || null), borderColor: palette.sleep, borderDash: [5, 5], yAxisID: "y1", fill: false, tension: 0 },
+        { label: "Água", data: series.water, borderColor: palette.water, yAxisID: "y1", fill: false, tension: 0 },
+        { label: "Meta Água", data: series.water.map(() => goals.water || null), borderColor: palette.water, borderDash: [5, 5], yAxisID: "y1", fill: false, tension: 0 }
       ]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        y: { position: "left", min: 0, grid: { color: "rgba(125,136,153,0.2)" } },
+        y: { position: "left", min: 0, grid: { color: palette.gridStrong } },
         y1: { position: "right", min: 0, max: Math.max(12, goals.sleep + 2 || 10, goals.water + 2 || 8), grid: { drawOnChartArea: false } },
-        x: { grid: { color: "rgba(125,136,153,0.15)" } }
+        x: { grid: { color: palette.gridSoft } }
       }
     }
   });
@@ -866,9 +1310,12 @@ function renderFinanceAnalytics() {
   const investment = sumByType(tx, "investment");
   const balance = income - expense - investment;
 
-  refs.finTotalIncome.textContent = formatCurrency(income);
-  refs.finTotalExpense.textContent = formatCurrency(expense);
-  refs.finTotalBalance.textContent = formatCurrency(balance);
+  refs.finTotalIncome.textContent = formatSignedCurrency(income, "income");
+  refs.finTotalIncome.className = "money-in";
+  refs.finTotalExpense.textContent = formatSignedCurrency(expense, "expense");
+  refs.finTotalExpense.className = "money-out";
+  refs.finTotalBalance.textContent = formatSignedCurrency(balance, balance < 0 ? "expense" : "income");
+  refs.finTotalBalance.className = balance < 0 ? "money-out" : "money-in";
 
   const byCategory = {};
   tx.filter((item) => item.type === "expense").forEach((item) => {
@@ -890,12 +1337,15 @@ function onTxSubmit(event) {
     note: refs.txNote.value.trim()
   };
   if (!tx.date || !tx.type || !tx.category || tx.amount <= 0) return;
-  state.transactions.push(tx);
-  refs.txForm.reset();
-  refs.txDate.value = todayKey;
-  refs.txType.value = "income";
-  hydrateCategorySelects();
-  persistAndRender();
+
+  openConfirmModal('Registrar movimentação de ' + formatCurrency(tx.amount) + ' em ' + tx.category + '?', () => {
+    state.transactions.push(tx);
+    refs.txForm.reset();
+    refs.txDate.value = todayKey;
+    refs.txType.value = "income";
+    hydrateCategorySelects();
+    persistAndRender();
+  });
 }
 
 function onBudgetSubmit(event) {
@@ -903,15 +1353,18 @@ function onBudgetSubmit(event) {
   const area = refs.budgetArea.value.trim();
   const planned = Number(refs.budgetPlanned.value);
   if (!area || planned <= 0) return;
-  const existing = state.budgets.find((b) => normalize(b.area) === normalize(area));
-  if (existing) {
-    existing.area = area;
-    existing.planned = planned;
-  } else {
-    state.budgets.push({ id: crypto.randomUUID(), area, planned });
-  }
-  refs.budgetForm.reset();
-  persistAndRender();
+
+  openConfirmModal('Salvar orçamento da área "' + area + '" em ' + formatCurrency(planned) + '?', () => {
+    const existing = state.budgets.find((b) => normalize(b.area) === normalize(area));
+    if (existing) {
+      existing.area = area;
+      existing.planned = planned;
+    } else {
+      state.budgets.push({ id: crypto.randomUUID(), area, planned });
+    }
+    refs.budgetForm.reset();
+    persistAndRender();
+  });
 }
 
 function financeBillMonthKey() {
@@ -979,37 +1432,36 @@ function onBillSubmit(event) {
     paid: {}
   };
   if (!bill.name || !bill.category || bill.amount <= 0 || bill.dueDay < 1 || bill.dueDay > 31) return;
-  bill.versions.push({
-    from: bill.createdMonth,
-    name: bill.name,
-    category: bill.category,
-    amount: bill.amount,
-    dueDay: bill.dueDay
+
+  openConfirmModal('Adicionar conta mensal "' + bill.name + '" (' + formatCurrency(bill.amount) + ')?', () => {
+    bill.versions.push({
+      from: bill.createdMonth,
+      name: bill.name,
+      category: bill.category,
+      amount: bill.amount,
+      dueDay: bill.dueDay
+    });
+    state.bills.push(bill);
+    refs.billForm.reset();
+    persistAndRender();
   });
-  state.bills.push(bill);
-  refs.billForm.reset();
-  persistAndRender();
 }
 function onBudgetActionClick(event) {
   const editBtn = event.target.closest("button[data-budget-edit]");
   const delBtn = event.target.closest("button[data-budget-delete]");
+
   if (editBtn) {
-    const item = state.budgets.find((b) => b.id === editBtn.dataset.budgetEdit);
-    if (!item) return;
-    const area = prompt("Área:", item.area);
-    if (area === null) return;
-    const plannedRaw = prompt("Planejado:", String(item.planned));
-    if (plannedRaw === null) return;
-    const planned = Number(plannedRaw);
-    if (!area.trim() || planned <= 0) return;
-    item.area = area.trim();
-    item.planned = planned;
-    persistAndRender();
+    openBudgetEditModal(editBtn.dataset.budgetEdit);
     return;
   }
+
   if (delBtn) {
-    state.budgets = state.budgets.filter((b) => b.id !== delBtn.dataset.budgetDelete);
-    persistAndRender();
+    const item = state.budgets.find((b) => b.id === delBtn.dataset.budgetDelete);
+    if (!item) return;
+    openConfirmModal('Excluir orçamento da área "' + item.area + '"?', () => {
+      state.budgets = state.budgets.filter((b) => b.id !== delBtn.dataset.budgetDelete);
+      persistAndRender();
+    });
   }
 }
 
@@ -1025,65 +1477,48 @@ function onBillActionClick(event) {
 
     const paidInfo = bill.paid[monthKey];
     if (paidInfo) {
-      if (paidInfo.txId) state.transactions = state.transactions.filter((tx) => tx.id !== paidInfo.txId);
-      delete bill.paid[monthKey];
+      openConfirmModal('Desfazer pagamento da conta "' + bill.name + '" em ' + labelMonth(monthKey) + '?', () => {
+        if (paidInfo.txId) state.transactions = state.transactions.filter((tx) => tx.id !== paidInfo.txId);
+        delete bill.paid[monthKey];
+        persistAndRender();
+      });
     } else {
       const version = billVersionForMonth(bill, monthKey);
-      const due = String(clamp(version.dueDay, 1, 31)).padStart(2, "0");
-      const tx = {
-        id: crypto.randomUUID(),
-        date: `${monthKey}-${due}`,
-        type: "expense",
-        category: version.category,
-        amount: version.amount,
-        note: `Pagamento da conta: ${version.name}`
-      };
-      state.transactions.push(tx);
-      bill.paid[monthKey] = { paidDate: todayKey, txId: tx.id };
+      openConfirmModal('Marcar "' + version.name + '" como paga e lançar saída de ' + formatCurrency(version.amount) + '?', () => {
+        const due = String(clamp(version.dueDay, 1, 31)).padStart(2, "0");
+        const tx = {
+          id: crypto.randomUUID(),
+          date: monthKey + '-' + due,
+          type: "expense",
+          category: version.category,
+          amount: version.amount,
+          note: 'Pagamento da conta: ' + version.name
+        };
+        state.transactions.push(tx);
+        bill.paid[monthKey] = { paidDate: todayKey, txId: tx.id };
+        persistAndRender();
+      });
     }
-    persistAndRender();
     return;
   }
 
   if (editBtn) {
-    const bill = state.bills.find((b) => b.id === editBtn.dataset.billEdit);
-    if (!bill) return;
-
-    const current = billVersionForMonth(bill, monthKey);
-    const name = prompt("Nome da conta:", current.name);
-    if (name === null) return;
-    const category = prompt("Categoria:", current.category);
-    if (category === null) return;
-    const amountRaw = prompt("Valor:", String(current.amount));
-    if (amountRaw === null) return;
-    const dueDayRaw = prompt("Dia da conta:", String(current.dueDay));
-    if (dueDayRaw === null) return;
-
-    const amount = Number(amountRaw);
-    const dueDay = Number(dueDayRaw);
-    if (!name.trim() || !category.trim() || amount <= 0 || dueDay < 1 || dueDay > 31) return;
-
-    upsertBillVersion(bill, monthKey, {
-      name: name.trim(),
-      category: category.trim(),
-      amount,
-      dueDay
-    });
-
-    persistAndRender();
+    openBillEditModal(editBtn.dataset.billEdit, monthKey);
     return;
   }
 
   if (delBtn) {
     const id = delBtn.dataset.billDelete;
     const bill = state.bills.find((b) => b.id === id);
-    if (bill) {
+    if (!bill) return;
+
+    openConfirmModal('Excluir conta mensal "' + bill.name + '" e pagamentos vinculados?', () => {
       Object.values(bill.paid || {}).forEach((entry) => {
         if (entry.txId) state.transactions = state.transactions.filter((tx) => tx.id !== entry.txId);
       });
-    }
-    state.bills = state.bills.filter((b) => b.id !== id);
-    persistAndRender();
+      state.bills = state.bills.filter((b) => b.id !== id);
+      persistAndRender();
+    });
   }
 }
 
@@ -1091,31 +1526,16 @@ function onTxActionClick(event) {
   const editBtn = event.target.closest("button[data-tx-edit]");
   const delBtn = event.target.closest("button[data-tx-delete]");
   if (editBtn) {
-    const tx = state.transactions.find((t) => t.id === editBtn.dataset.txEdit);
-    if (!tx) return;
-    const date = prompt("Data (AAAA-MM-DD):", tx.date);
-    if (date === null) return;
-    const type = prompt("Tipo (income, expense, investment):", tx.type);
-    if (type === null) return;
-    const category = prompt("Categoria:", tx.category);
-    if (category === null) return;
-    const amountRaw = prompt("Valor:", String(tx.amount));
-    if (amountRaw === null) return;
-    const note = prompt("Observação:", tx.note || "");
-    if (note === null) return;
-    const amount = Number(amountRaw);
-    if (!date || !["income", "expense", "investment"].includes(type) || !category.trim() || amount <= 0) return;
-    tx.date = date;
-    tx.type = type;
-    tx.category = category.trim();
-    tx.amount = amount;
-    tx.note = note.trim();
-    persistAndRender();
+    openTxEditModal(editBtn.dataset.txEdit);
     return;
   }
   if (delBtn) {
-    state.transactions = state.transactions.filter((t) => t.id !== delBtn.dataset.txDelete);
-    persistAndRender();
+    const tx = state.transactions.find((t) => t.id === delBtn.dataset.txDelete);
+    if (!tx) return;
+    openConfirmModal('Excluir movimentação de ' + formatCurrency(tx.amount) + ' em ' + tx.category + '?', () => {
+      state.transactions = state.transactions.filter((t) => t.id !== delBtn.dataset.txDelete);
+      persistAndRender();
+    });
   }
 }
 
@@ -1128,10 +1548,10 @@ function renderFinanceOps() {
   const balance = income - expense - investment;
 
   refs.financeQuickSummary.innerHTML = `
-    <div class="list-item"><span>Entradas</span><strong>${formatCurrency(income)}</strong></div>
-    <div class="list-item"><span>Saídas</span><strong>${formatCurrency(expense)}</strong></div>
-    <div class="list-item"><span>Investimentos</span><strong>${formatCurrency(investment)}</strong></div>
-    <div class="list-item"><span>Saldo atual</span><strong>${formatCurrency(balance)}</strong></div>
+    <div class="list-item"><span>Entradas</span><strong class="money-in">${formatSignedCurrency(income, "income")}</strong></div>
+    <div class="list-item"><span>Saídas</span><strong class="money-out">${formatSignedCurrency(expense, "expense")}</strong></div>
+    <div class="list-item"><span>Investimentos</span><strong class="money-out">${formatSignedCurrency(investment, "expense")}</strong></div>
+    <div class="list-item"><span>Saldo atual</span><strong class="${balance < 0 ? "money-out" : "money-in"}">${formatSignedCurrency(balance, balance < 0 ? "expense" : "income")}</strong></div>
   `;
 
   refs.budgetTable.innerHTML = state.budgets.map((budget) => {
@@ -1180,7 +1600,7 @@ function renderFinanceOps() {
       <td>${formatDate(tx.date)}</td>
       <td>${labelTxType(tx.type)}</td>
       <td>${escapeHtml(tx.category)}</td>
-      <td>${formatCurrency(tx.amount)}</td>
+      <td class="${tx.type === "income" ? "money-in" : "money-out"}">${formatSignedCurrency(tx.amount, tx.type)}</td>
       <td>${escapeHtml(tx.note || "-")}</td>
       <td><button class="btn ghost" data-tx-edit="${tx.id}" type="button">Editar</button> <button class="btn danger" data-tx-delete="${tx.id}" type="button">Excluir</button></td>
     </tr>
@@ -1212,6 +1632,7 @@ function renderPieByMonth(canvas, chartKey, monthKey, totalEl, topEl, legendEl) 
 }
 
 function renderPie(entries, canvas, chartKey, legendEl) {
+  const palette = getChartPalette();
   const labels = entries.map(([label]) => label);
   const values = entries.map(([, value]) => value);
   const total = values.reduce((sum, value) => sum + value, 0);
@@ -1221,9 +1642,9 @@ function renderPie(entries, canvas, chartKey, legendEl) {
       labels,
       datasets: [{
         data: values,
-        borderColor: "#fff",
+        borderColor: palette.pieBorder,
         borderWidth: 1,
-        backgroundColor: ["#4f5d75", "#ef8354", "#2d3142", "#7f8fa4", "#bfc7d5", "#597493", "#9ab4cf"]
+        backgroundColor: palette.pie
       }]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: "60%" }
@@ -1247,15 +1668,100 @@ function drawOrUpdateChart(key, canvas, config) {
 }
 
 function baseLineOptions(hideLegend, min, max) {
+  const palette = getChartPalette();
   return {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { display: !hideLegend } },
     scales: {
-      y: { min, max, grid: { color: "rgba(125,136,153,0.2)" } },
-      x: { grid: { color: "rgba(125,136,153,0.15)" } }
+      y: { min, max, grid: { color: palette.gridStrong } },
+      x: { grid: { color: palette.gridSoft } }
     }
   };
+}
+
+function getChartPalette() {
+  const theme = state.settings.theme || "light";
+  const palettes = {
+    light: {
+      habitLine: "#3d556b",
+      habitFill: "rgba(61,85,107,0.15)",
+      kcal: "#cf4d4d",
+      sleep: "#3e79cc",
+      water: "#2f9b74",
+      pie: ["#4f5d75", "#3f6f9b", "#2d3142", "#7f8fa4", "#bfc7d5", "#597493", "#9ab4cf"],
+      pieBorder: "#ffffff",
+      gridStrong: "rgba(125,136,153,0.2)",
+      gridSoft: "rgba(125,136,153,0.15)"
+    },
+    dark: {
+      habitLine: "#7aa6d1",
+      habitFill: "rgba(122,166,209,0.18)",
+      kcal: "#ff6f6f",
+      sleep: "#6ea9ff",
+      water: "#49c99a",
+      pie: ["#5f7392", "#496a8f", "#3d465f", "#8fa1be", "#ced6e6", "#6e88ad", "#a9c2df"],
+      pieBorder: "#111419",
+      gridStrong: "rgba(112,126,148,0.26)",
+      gridSoft: "rgba(112,126,148,0.2)"
+    },
+    "pastel-pink": {
+      habitLine: "#b45f86",
+      habitFill: "rgba(180,95,134,0.18)",
+      kcal: "#ca5f69",
+      sleep: "#7a89d8",
+      water: "#4ea786",
+      pie: ["#d8749c", "#c989b8", "#b188a2", "#c6b2cf", "#e9d7e2", "#a285c2", "#f1bfd0"],
+      pieBorder: "#ffffff",
+      gridStrong: "rgba(170,128,145,0.24)",
+      gridSoft: "rgba(170,128,145,0.18)"
+    },
+    "pastel-green": {
+      habitLine: "#4f9b67",
+      habitFill: "rgba(79,155,103,0.18)",
+      kcal: "#ce6a62",
+      sleep: "#6a91cc",
+      water: "#42a27a",
+      pie: ["#4fa46b", "#6aaf84", "#7a9f87", "#9cc9a9", "#d5ebdb", "#7ab389", "#bfdcc7"],
+      pieBorder: "#ffffff",
+      gridStrong: "rgba(101,139,112,0.24)",
+      gridSoft: "rgba(101,139,112,0.18)"
+    },
+    "pastel-blue": {
+      habitLine: "#5a8fd8",
+      habitFill: "rgba(90,143,216,0.18)",
+      kcal: "#c46666",
+      sleep: "#4c7fca",
+      water: "#3ea084",
+      pie: ["#5a8fd8", "#6f95c9", "#5f7392", "#8aa8d6", "#d8e6fa", "#7396c8", "#b9cfee"],
+      pieBorder: "#ffffff",
+      gridStrong: "rgba(100,130,170,0.24)",
+      gridSoft: "rgba(100,130,170,0.18)"
+    },
+    "pastel-purple": {
+      habitLine: "#9a79d8",
+      habitFill: "rgba(154,121,216,0.18)",
+      kcal: "#cb6a7a",
+      sleep: "#6f86d6",
+      water: "#4d9f8a",
+      pie: ["#9a79d8", "#8d84c6", "#7e6aa6", "#b7a0df", "#e8defa", "#927dc3", "#cbb8eb"],
+      pieBorder: "#ffffff",
+      gridStrong: "rgba(130,114,164,0.24)",
+      gridSoft: "rgba(130,114,164,0.18)"
+    },
+    "black-red": {
+      habitLine: "#ff5a70",
+      habitFill: "rgba(255,90,112,0.18)",
+      kcal: "#ff6b6b",
+      sleep: "#87a7ff",
+      water: "#4fc99c",
+      pie: ["#ff3b52", "#d54f78", "#6f788f", "#9ca6be", "#d4d8e7", "#b94b73", "#7f8da9"],
+      pieBorder: "#0e0e12",
+      gridStrong: "rgba(125,125,142,0.24)",
+      gridSoft: "rgba(125,125,142,0.18)"
+    }
+  };
+  return palettes[theme] || palettes.light;
 }
 function renderJournal() {
   const dateKey = state.ui.journalDate || todayKey;
@@ -1274,10 +1780,11 @@ function renderJournal() {
 }
 
 function onDeleteAccount() {
-  if (!confirm("Excluir todos os dados locais da conta?")) return;
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(SESSION_KEY);
-  location.reload();
+  openConfirmModal("Excluir todos os dados locais da conta?", () => {
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    location.reload();
+  });
 }
 
 function sumByType(transactions, type) {
@@ -1290,15 +1797,39 @@ function labelTxType(type) {
   return "Investimento";
 }
 
-function markHabitToday(name) {
+function findHabitByName(name) {
   const key = normalize(name);
-  let habit = state.habits.find((h) => normalize(h.name) === key);
+  const exact = state.habits.find((h) => normalize(h.name) === key);
+  if (exact) return exact;
+
+  // fallback: permite "jiu" casar com "Jiu-Jitsu"
+  const partial = state.habits.find((h) => {
+    const n = normalize(h.name);
+    return n.includes(key) || key.includes(n);
+  });
+  return partial || null;
+}
+function markHabitByDate(name, dateKey = todayKey) {
+  let habit = findHabitByName(name);
   if (!habit) {
     habit = { id: crypto.randomUUID(), name, goal: 20, logs: {} };
     state.habits.push(habit);
   }
-  habit.logs[todayKey] = true;
+  habit.logs[dateKey] = true;
 }
+
+function unmarkHabitByDate(name, dateKey = todayKey) {
+  const habit = findHabitByName(name);
+  if (!habit) return false;
+  if (!habit.logs?.[dateKey]) return false;
+  delete habit.logs[dateKey];
+  return true;
+}
+
+function markHabitToday(name) {
+  markHabitByDate(name, todayKey);
+}
+
 
 function completedInMonthForHabit(habit, monthKey) {
   return Object.keys(habit.logs || {}).filter((d) => d.startsWith(monthKey)).length;
@@ -1377,6 +1908,13 @@ function formatCurrency(value) {
   return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function formatSignedCurrency(value, type = "income") {
+  const amount = Math.abs(Number(value || 0));
+  const signed = type === "expense" || type === "investment" ? -amount : amount;
+  const prefix = signed < 0 ? "-" : "+";
+  return `${prefix}${formatCurrency(Math.abs(signed))}`;
+}
+
 function escapeHtml(text) {
   return String(text)
     .replaceAll("&", "&amp;")
@@ -1387,7 +1925,158 @@ function escapeHtml(text) {
 }
 
 function applyTheme(theme) {
-  document.body.classList.toggle("dark", theme === "dark");
+  const next = THEME_ORDER.includes(theme) ? theme : "light";
+  document.body.classList.remove("theme-light", "theme-dark", "theme-pastel-pink", "theme-pastel-green", "theme-pastel-blue", "theme-pastel-purple", "theme-black-red");
+  document.body.classList.add(`theme-${next}`);
+}
+
+function openHabitEditModal(habitId) {
+  const habit = state.habits.find((h) => h.id === habitId);
+  if (!habit) return;
+  editingHabitId = habit.id;
+  refs.habitEditName.value = habit.name;
+  refs.habitEditGoal.value = String(habit.goal);
+  refs.habitEditModal.classList.remove("hidden");
+}
+
+function closeHabitEditModal() {
+  editingHabitId = "";
+  refs.habitEditModal.classList.add("hidden");
+}
+
+function onHabitEditSubmit(event) {
+  event.preventDefault();
+  const habit = state.habits.find((h) => h.id === editingHabitId);
+  if (!habit) return;
+  const name = refs.habitEditName.value.trim();
+  const goal = Number(refs.habitEditGoal.value);
+  if (!name || goal < 1) return;
+  habit.name = name;
+  habit.goal = goal;
+  closeHabitEditModal();
+  persistAndRender();
+}
+
+function hydrateTxEditCategorySelect() {
+  const type = refs.txEditType.value;
+  const categories = CATEGORY_BY_TYPE[type] || CATEGORY_BY_TYPE.expense;
+  const current = refs.txEditCategory.dataset.current || "";
+  refs.txEditCategory.innerHTML = categories.map((item) => `<option value="${item}">${item}</option>`).join("");
+  refs.txEditCategory.value = categories.includes(current) ? current : categories[0];
+}
+
+function openTxEditModal(txId) {
+  const tx = state.transactions.find((t) => t.id === txId);
+  if (!tx) return;
+  editingTxId = tx.id;
+  refs.txEditDate.value = tx.date;
+  refs.txEditType.value = tx.type;
+  refs.txEditCategory.dataset.current = tx.category;
+  hydrateTxEditCategorySelect();
+  refs.txEditAmount.value = String(tx.amount);
+  refs.txEditNote.value = tx.note || "";
+  refs.txEditModal.classList.remove("hidden");
+}
+
+function closeTxEditModal() {
+  editingTxId = "";
+  refs.txEditModal.classList.add("hidden");
+}
+
+function onTxEditSubmit(event) {
+  event.preventDefault();
+  const tx = state.transactions.find((t) => t.id === editingTxId);
+  if (!tx) return;
+  const date = refs.txEditDate.value;
+  const type = refs.txEditType.value;
+  const category = refs.txEditCategory.value;
+  const amount = Number(refs.txEditAmount.value);
+  const note = refs.txEditNote.value.trim();
+  if (!date || !["income", "expense", "investment"].includes(type) || !category || amount <= 0) return;
+  tx.date = date;
+  tx.type = type;
+  tx.category = category;
+  tx.amount = amount;
+  tx.note = note;
+  closeTxEditModal();
+  persistAndRender();
+}
+function openBudgetEditModal(budgetId) {
+  const budget = state.budgets.find((b) => b.id === budgetId);
+  if (!budget) return;
+  editingBudgetId = budget.id;
+  refs.budgetEditArea.value = budget.area;
+  refs.budgetEditPlanned.value = String(budget.planned);
+  refs.budgetEditModal.classList.remove("hidden");
+}
+
+function closeBudgetEditModal() {
+  editingBudgetId = "";
+  refs.budgetEditModal.classList.add("hidden");
+}
+
+function onBudgetEditSubmit(event) {
+  event.preventDefault();
+  const budget = state.budgets.find((b) => b.id === editingBudgetId);
+  if (!budget) return;
+  const area = refs.budgetEditArea.value.trim();
+  const planned = Number(refs.budgetEditPlanned.value);
+  if (!area || planned <= 0) return;
+  budget.area = area;
+  budget.planned = planned;
+  closeBudgetEditModal();
+  persistAndRender();
+}
+
+function openBillEditModal(billId, monthKey = financeBillMonthKey()) {
+  const bill = state.bills.find((b) => b.id === billId);
+  if (!bill) return;
+  const current = billVersionForMonth(bill, monthKey);
+  editingBillId = bill.id + '::' + monthKey;
+  refs.billEditName.value = current.name;
+  refs.billEditCategory.innerHTML = CATEGORY_BY_TYPE.expense.map((c) => '<option value="' + c + '">' + c + '</option>').join('');
+  refs.billEditCategory.value = CATEGORY_BY_TYPE.expense.includes(current.category) ? current.category : "Outros";
+  refs.billEditAmount.value = String(current.amount);
+  refs.billEditDueDay.value = String(current.dueDay);
+  refs.billEditModal.classList.remove("hidden");
+}
+
+function closeBillEditModal() {
+  editingBillId = "";
+  refs.billEditModal.classList.add("hidden");
+}
+
+function onBillEditSubmit(event) {
+  event.preventDefault();
+  const parts = String(editingBillId || '').split('::');
+  const billId = parts[0] || '';
+  const monthKey = parts[1] || financeBillMonthKey();
+  const bill = state.bills.find((b) => b.id === billId);
+  if (!bill) return;
+
+  const name = refs.billEditName.value.trim();
+  const category = refs.billEditCategory.value;
+  const amount = Number(refs.billEditAmount.value);
+  const dueDay = Number(refs.billEditDueDay.value);
+  if (!name || !category || amount <= 0 || dueDay < 1 || dueDay > 31) return;
+
+  upsertBillVersion(bill, monthKey, { name, category, amount, dueDay });
+  closeBillEditModal();
+  persistAndRender();
+}
+
+function openConfirmModal(message, onConfirm) {
+  refs.confirmMessage.textContent = message;
+  confirmActionHandler = typeof onConfirm === "function" ? onConfirm : null;
+  refs.confirmModal.classList.remove("hidden");
+}
+
+function closeConfirmModal() {
+  confirmActionHandler = null;
+  confirmBusy = false;
+  refs.confirmOkBtn.disabled = false;
+  refs.confirmOkBtn.textContent = "Confirmar";
+  refs.confirmModal.classList.add("hidden");
 }
 
 function normalizeBills(bills) {
@@ -1462,7 +2151,10 @@ function loadState() {
       settings: { ...base.settings, ...(parsed.settings || {}) },
       ui: { ...base.ui, ...(parsed.ui || {}) },
       healthGoals: { ...base.healthGoals, ...(parsed.healthGoals || {}) },
-      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map((task) => ({
+        ...task,
+        sortOrder: Number(task?.sortOrder || 0)
+      })) : [],
       habits: Array.isArray(parsed.habits) ? parsed.habits : [],
       healthLogs: parsed.healthLogs && typeof parsed.healthLogs === "object" ? parsed.healthLogs : {},
       transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
@@ -1502,9 +2194,11 @@ function persistAndRender() {
 }
 
 function scheduleRemoteSave() {
-  if (!authToken) return;
+  if (!authToken || !currentStateOwnerId) return;
   clearTimeout(saveTimer);
+  const ownerAtSchedule = currentStateOwnerId;
   saveTimer = setTimeout(async () => {
+    if (!authToken || ownerAtSchedule !== currentStateOwnerId) return;
     try {
       await apiRequest("/api/state", {
         method: "PUT",
@@ -1517,9 +2211,13 @@ function scheduleRemoteSave() {
 }
 
 async function pullRemoteState() {
+  if (!authToken || !currentStateOwnerId) return;
   try {
     const data = await apiRequest("/api/state");
-    if (!data?.state || typeof data.state !== "object") return;
+    if (!data?.state || typeof data.state !== "object") {
+      hydrateStateFromRemote(defaultState());
+      return;
+    }
     hydrateStateFromRemote(data.state);
   } catch (_error) {
     // fallback to local only
@@ -1534,7 +2232,10 @@ function hydrateStateFromRemote(remote) {
     settings: { ...base.settings, ...(remote.settings || {}) },
     ui: { ...state.ui, ...(remote.ui || {}) },
     healthGoals: { ...base.healthGoals, ...(remote.healthGoals || {}) },
-    tasks: Array.isArray(remote.tasks) ? remote.tasks : [],
+    tasks: Array.isArray(remote.tasks) ? remote.tasks.map((task) => ({
+      ...task,
+      sortOrder: Number(task?.sortOrder || 0)
+    })) : [],
     habits: Array.isArray(remote.habits) ? remote.habits : [],
     healthLogs: remote.healthLogs && typeof remote.healthLogs === "object" ? remote.healthLogs : {},
     transactions: Array.isArray(remote.transactions) ? remote.transactions : [],
@@ -1559,6 +2260,19 @@ async function apiRequest(endpoint, options = {}, requireAuth = true) {
   if (!res.ok) throw new Error(data?.error || `Erro HTTP ${res.status}`);
   return data;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

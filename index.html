@@ -12,27 +12,40 @@
 <body>
   <section class="login-screen" id="loginScreen">
     <form class="login-card" id="loginForm">
-      <h1>PULSEBOARD</h1>
+      <h1 class="brand-inline">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 64 64" role="img" focusable="false">
+            <circle cx="32" cy="32" r="28"></circle>
+            <path d="M9 33h11l4-9 8 22 7-16 3 3h13"></path>
+          </svg>
+        </span>
+        PULSEBOARD
+      </h1>
       <p class="muted">Entre para acessar seu painel</p>
       <label>Email<input id="loginUser" type="email" placeholder="Ex: voce@email.com" required></label>
       <label>Senha<input id="loginPass" type="password" placeholder="Digite sua senha" required></label>
       <button class="btn" type="submit">Entrar</button>
       <p class="login-error" id="loginError"></p>
-      </form>
+    </form>
   </section>
 
   <div class="app hidden" id="appShell">
     <aside class="sidebar">
-      <h1 class="brand">PULSEBOARD</h1>
+      <div class="brand-wrap">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 64 64" role="img" focusable="false">
+            <circle cx="32" cy="32" r="28"></circle>
+            <path d="M9 33h11l4-9 8 22 7-16 3 3h13"></path>
+          </svg>
+        </span>
+        <h1 class="brand">PulseBoard</h1>
+      </div>
       <nav class="menu" id="menu"></nav>
     </aside>
 
     <main class="content">
       <header class="header card">
-        <div>
-          <p class="muted">Painel pessoal</p>
-          <h2 id="headerTitle">Dashboard</h2>
-        </div>
+        <div><h2 id="headerTitle">Dashboard</h2></div>
         <div class="header-right">
           <span class="chip" id="todayChip"></span>
           <button class="btn ghost" id="themeToggleBtn" type="button">Tema</button>
@@ -63,7 +76,7 @@
             <form id="dashTaskForm" class="inline-form">
               <input id="dashTaskInput" type="text" placeholder="Criar tarefa rápida" required>
               <button class="btn" type="submit">Adicionar</button>
-              </form>
+            </form>
             <div id="dashTaskList" class="list"></div>
           </article>
         </div>
@@ -71,12 +84,15 @@
 
       <section class="view" id="view-jarvis">
         <article class="card jarvis-chat-card">
-          <h3>Jarvis</h3>
-          <div id="jarvisHistory" class="chat-thread"></div>
-          <form id="jarvisForm" class="chat-form">
+          <div class="jarvis-topbar">
+            <h3>Jarvis</h3>
+            <p class="muted">Conversa natural. Se você pedir para registrar, eu salvo no app.</p>
+          </div>
+          <div id="jarvisHistory" class="chat-thread jarvis-thread"></div>
+          <form id="jarvisForm" class="chat-form jarvis-inputbar">
             <input id="jarvisInput" type="text" placeholder="Digite sua mensagem" required>
-            <button class="btn" type="submit">Enviar</button>
-            </form>
+            <button class="btn" id="jarvisSendBtn" type="submit" disabled>Enviar</button>
+          </form>
         </article>
       </section>
 
@@ -90,7 +106,7 @@
             <form id="habitTaskForm" class="inline-form">
               <input id="habitTaskInput" type="text" placeholder="Adicionar tarefa" required>
               <button class="btn" type="submit">Adicionar</button>
-              </form>
+            </form>
             <div id="habitTaskList" class="list"></div>
             <div class="calendar-nav">
               <button class="btn ghost" type="button" id="habitCalendarPrev">Dia anterior</button>
@@ -105,7 +121,7 @@
               <input id="habitName" type="text" placeholder="Nome do hábito" required>
               <input id="habitGoal" type="number" min="1" max="31" value="20" required>
               <button class="btn" type="submit">Adicionar</button>
-              </form>
+            </form>
             <div class="table-wrap">
               <table class="habit-grid">
                 <thead id="habitGridHead"></thead>
@@ -151,7 +167,7 @@
               <label>Horas dormidas<input id="healthSleep" type="number" min="0" max="24" step="0.1" required></label>
               <label>Litros de água<input id="healthWater" type="number" min="0" max="12" step="0.1" required></label>
               <button class="btn" type="submit">Salvar</button>
-              </form>
+            </form>
           </article>
 
           <article class="card">
@@ -205,7 +221,7 @@
                 <label>Valor<input id="txAmount" type="number" min="0.01" step="0.01" required></label>
                 <label class="full">Observação<input id="txNote" type="text"></label>
                 <button class="btn" type="submit">Registrar</button>
-                </form>
+              </form>
             </article>
           </div>
 
@@ -215,7 +231,7 @@
               <input id="budgetArea" type="text" placeholder="Área" required>
               <input id="budgetPlanned" type="number" min="0.01" step="0.01" placeholder="Planejado" required>
               <button class="btn" type="submit">Salvar</button>
-              </form>
+            </form>
             <div class="table-wrap"><table><thead><tr><th>Área</th><th>Planejado</th><th>Gasto</th><th>Saldo</th><th>Progresso</th><th>Ações</th></tr></thead><tbody id="budgetTable"></tbody></table></div>
           </article>
 
@@ -227,7 +243,7 @@
               <label>Valor<input id="billAmount" type="number" min="0.01" step="0.01" required></label>
               <label>Dia da conta<input id="billDueDay" type="number" min="1" max="31" required></label>
               <button class="btn" type="submit">Adicionar conta</button>
-              </form>
+            </form>
             <div class="table-wrap"><table><thead><tr><th>Conta</th><th>Categoria</th><th>Valor</th><th>Dia da conta</th><th>Status</th><th>Pago em</th><th>Ações</th></tr></thead><tbody id="billTable"></tbody></table></div>
           </article>
 
@@ -266,20 +282,157 @@
             <label>Nome<input id="settingsName" type="text" required></label>
             <label>Email<input id="settingsEmail" type="email" required></label>
             <label>Nova senha<input id="settingsPassword" type="password" placeholder="Deixe vazio para manter"></label>
-            <label>Tema<select id="settingsTheme"><option value="light">Claro</option><option value="dark">Escuro</option></select></label>
+            <label>Tema<select id="settingsTheme"><option value="light">Claro</option><option value="dark">Escuro</option><option value="pastel-pink">Pastel rosa</option><option value="pastel-green">Pastel verde</option><option value="pastel-blue">Pastel azul</option><option value="pastel-purple">Pastel roxo</option><option value="black-red">Preto e vermelho</option></select></label>
             <button class="btn" type="submit">Salvar configurações</button>
             <button class="btn danger" id="deleteAccountBtn" type="button">Excluir conta</button>
           </form>
           <p id="settingsMessage" class="muted"></p>
         </article>
       </section>
+
+      <section class="view" id="view-users">
+        <article class="card users-admin-card">
+          <div class="users-toolbar">
+            <div>
+              <h3>Usuários</h3>
+              <p class="muted">Gerencie os acessos do PulseBoard.</p>
+            </div>
+            <button class="btn" id="adminOpenCreateBtn" type="button">Criar usuário</button>
+          </div>
+          <p id="adminUserMessage" class="muted"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nome</th>
+                  <th>Email</th>
+                  <th>Permissão</th>
+                  <th>Criado em</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="adminUsersTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
     </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="adminUserModal">
+    <form class="modal-card" id="adminUserForm">
+      <h3>Novo usuário</h3>
+      <label>Nome<input id="adminUserName" type="text" required></label>
+      <label>Email<input id="adminUserEmail" type="email" required></label>
+      <label>Senha<input id="adminUserPassword" type="password" required></label>
+      <label>Permissão
+        <select id="adminUserRole">
+          <option value="user">Usuário</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="adminUserCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Criar usuário</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="adminUserEditModal">
+    <form class="modal-card" id="adminUserEditForm">
+      <h3>Editar usuário</h3>
+      <label>Nome<input id="adminEditName" type="text" required></label>
+      <label>Email<input id="adminEditEmail" type="email" required></label>
+      <label>Nova senha (opcional)<input id="adminEditPassword" type="password" placeholder="Deixe em branco para manter"></label>
+      <label>Permissão
+        <select id="adminEditRole">
+          <option value="user">Usuário</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="adminEditCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="taskEditModal">
+    <form class="modal-card" id="taskEditForm">
+      <h3>Editar tarefa</h3>
+      <label>Título da tarefa<input id="taskEditTitle" type="text" required></label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="taskEditCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="habitEditModal">
+    <form class="modal-card" id="habitEditForm">
+      <h3>Editar hábito</h3>
+      <label>Nome do hábito<input id="habitEditName" type="text" required></label>
+      <label>Meta mensal (dias)<input id="habitEditGoal" type="number" min="1" max="31" required></label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="habitEditCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="txEditModal">
+    <form class="modal-card" id="txEditForm">
+      <h3>Editar movimentação</h3>
+      <label>Data<input id="txEditDate" type="date" required></label>
+      <label>Tipo<select id="txEditType"><option value="income">Entrada</option><option value="expense">Saída</option><option value="investment">Investimento</option></select></label>
+      <label>Categoria<select id="txEditCategory" required></select></label>
+      <label>Valor<input id="txEditAmount" type="number" min="0.01" step="0.01" required></label>
+      <label>Observação<input id="txEditNote" type="text"></label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="txEditCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="budgetEditModal">
+    <form class="modal-card" id="budgetEditForm">
+      <h3>Editar orçamento</h3>
+      <label>Área<input id="budgetEditArea" type="text" required></label>
+      <label>Planejado<input id="budgetEditPlanned" type="number" min="0.01" step="0.01" required></label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="budgetEditCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="billEditModal">
+    <form class="modal-card" id="billEditForm">
+      <h3>Editar conta mensal</h3>
+      <label>Nome da conta<input id="billEditName" type="text" required></label>
+      <label>Categoria<select id="billEditCategory" required></select></label>
+      <label>Valor<input id="billEditAmount" type="number" min="0.01" step="0.01" required></label>
+      <label>Dia da conta<input id="billEditDueDay" type="number" min="1" max="31" required></label>
+      <div class="modal-actions">
+        <button class="btn ghost" id="billEditCancelBtn" type="button">Cancelar</button>
+        <button class="btn" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-backdrop hidden" id="confirmModal">
+    <div class="modal-card">
+      <h3>Confirmação</h3>
+      <p id="confirmMessage" class="muted"></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="confirmCancelBtn" type="button">Cancelar</button>
+        <button class="btn danger" id="confirmOkBtn" type="button">Confirmar</button>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
-
-
-
