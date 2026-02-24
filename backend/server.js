@@ -6,7 +6,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pg from "pg";
 
-dotenv.config();
+const envFile = process.env.ENV_FILE || ".env";
+dotenv.config({ path: envFile });
 
 const { Pool } = pg;
 const app = express();
@@ -17,10 +18,11 @@ const aiModel = process.env.AI_MODEL || process.env.OPENAI_MODEL || defaultModel
 const aiApiKey = String(process.env.AI_API_KEY || process.env.OPENAI_API_KEY || "").trim();
 const aiBaseURL = process.env.AI_BASE_URL || defaultBaseUrlByProvider(aiProvider);
 const jwtSecret = process.env.JWT_SECRET || "dev-secret-change-me";
+const corsOrigin = resolveCorsOrigin(process.env.ALLOWED_ORIGIN);
 
 const pool = new Pool(buildDbConfig());
 
-app.use(cors({ origin: process.env.ALLOWED_ORIGIN || true }));
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json({ limit: "2mb" }));
 
 try {
@@ -561,6 +563,24 @@ function buildDbConfig() {
   };
 }
 
+function resolveCorsOrigin(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value || value === "*") return true;
+
+  const allowed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (!allowed.length) return true;
+  if (allowed.length === 1) return allowed[0];
+
+  return (origin, callback) => {
+    if (!origin || allowed.includes(origin)) return callback(null, true);
+    return callback(new Error("CORS origin bloqueada"));
+  };
+}
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -686,5 +706,5 @@ function adminRequired(req, res, next) {
 }
 
 app.listen(port, () => {
-  console.log(`Backend online em http://localhost:${port}`);
+  console.log(`Backend online em http://localhost:${port} (ENV_FILE=${envFile})`);
 });

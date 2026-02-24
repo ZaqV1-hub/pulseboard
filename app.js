@@ -13,6 +13,17 @@ const MENU_ITEMS = [
   { id: "users", label: "Usuários", adminOnly: true }
 ];
 
+const MENU_ICONS = {
+  dashboard: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13h6v7H4zM14 4h6v16h-6zM4 4h6v7H4zM14 13h6v7h-6z"/></svg>`,
+  jarvis: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8M12 4v2M7 9h10v7a5 5 0 0 1-10 0zM4 11h3M17 11h3M9.5 14.5h.01M14.5 14.5h.01"/></svg>`,
+  habits: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12.5 11.5 15 16 9.5"/><path d="M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"/></svg>`,
+  health: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>`,
+  finance: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M7.5 7.5a3.5 3.5 0 0 1 3.5-2h2a3 3 0 1 1 0 6h-2a3 3 0 1 0 0 6h2a3.5 3.5 0 0 0 3.5-2"/></svg>`,
+  journal: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h9a3 3 0 0 1 3 3v13H9a3 3 0 0 0-3 3z"/><path d="M6 4v16a3 3 0 0 1 3 3"/><path d="M10 9h5M10 13h5"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 8 1.2-2.4 2.6.4.9 2.5 2.2 1.4-.8 2.5 1.5 2.2-1.9 1.9-2.2-1.5-2.5.8-1.4 2.2-2.5-.9-.4-2.6L8 12 5.8 10.6l.8-2.5L5.1 5.9 7 4l2.2 1.5 2.5-.8z"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+  users: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 19a4 4 0 0 0-8 0"/><circle cx="12" cy="11" r="3"/><path d="M5 19a3 3 0 0 1 3-3M19 19a3 3 0 0 0-3-3"/><circle cx="6.5" cy="11.5" r="2"/><circle cx="17.5" cy="11.5" r="2"/></svg>`
+};
+
 const CATEGORY_BY_TYPE = {
   income: ["Salário", "Freelance", "Renda extra", "Reembolso", "Outros"],
   expense: ["Moradia", "Mercado", "Alimentação", "Transporte", "Saúde", "Educação", "Lazer", "Assinaturas", "Impostos", "Outros"],
@@ -704,7 +715,12 @@ function buildMenu() {
   if (!visibleMenu.some((item) => item.id === state.ui.activeView)) {
     state.ui.activeView = "dashboard";
   }
-  refs.menu.innerHTML = visibleMenu.map((item) => `<button class="menu-btn ${item.id === state.ui.activeView ? "active" : ""}" data-view="${item.id}" type="button">${item.label}</button>`).join("");
+  refs.menu.innerHTML = visibleMenu.map((item) => `
+    <button class="menu-btn ${item.id === state.ui.activeView ? "active" : ""}" data-view="${item.id}" type="button" aria-label="${item.label}">
+      <span class="menu-icon">${MENU_ICONS[item.id] || ""}</span>
+      <span class="menu-label">${item.label}</span>
+    </button>
+  `).join("");
   refs.menu.querySelectorAll(".menu-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       state.ui.activeView = btn.dataset.view;

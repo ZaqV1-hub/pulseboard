@@ -1,10 +1,10 @@
-﻿# PulseBoard Backend (PostgreSQL)
+# PulseBoard Backend (PostgreSQL)
 
 Backend com:
 - login por email/senha
 - cadastro publico desabilitado
 - estado do app salvo por usuario
-- Jarvis com OpenAI usando contexto real do usuario
+- Jarvis com IA usando contexto real do usuario
 - banco PostgreSQL
 
 ## 1) Instalacao
@@ -12,26 +12,42 @@ Backend com:
 ```bash
 cd backend
 npm install
-cp .env.example .env
 ```
 
-## 2) Configuracao do `.env`
+## 2) Ambientes (`producao` e `local`)
 
-Preencha no minimo:
-- `OPENAI_API_KEY=...`
-- `JWT_SECRET=...`
-- `ALLOWED_ORIGIN=http://127.0.0.1:5500`
-- `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pulseboard`
+O backend carrega `.env` por padrao.
+Se quiser alternar sem trocar arquivo, use `ENV_FILE`.
 
-## 3) Rodar
+- Producao (Render): mantenha variaveis no painel da plataforma.
+- Local (teste): use um arquivo separado, por exemplo `.env.local`.
 
-```bash
+Crie o arquivo local:
+
+```powershell
+Copy-Item .env.local.example .env.local
+```
+
+## 3) Rodar local para desenvolvimento
+
+```powershell
+$env:ENV_FILE=".env.local"
 npm run dev
 ```
 
-Servidor: `http://localhost:8787`
+Servidor local: `http://localhost:8787`
 
-## 4) Endpoints
+No frontend, abrindo por `localhost` ou `127.0.0.1`, ele ja usa o backend local automaticamente.
+
+## 4) CORS
+
+`ALLOWED_ORIGIN` aceita:
+- origem unica: `http://127.0.0.1:5500`
+- varias origens separadas por virgula:
+  `http://127.0.0.1:5500,http://localhost:5500,http://localhost:5173`
+- `*` (ou vazio) para liberar geral
+
+## 5) Endpoints
 
 ### Auth
 - `POST /api/auth/register` -> `403` (desabilitado)
@@ -45,7 +61,7 @@ Servidor: `http://localhost:8787`
 ### Jarvis
 - `POST /api/jarvis` (Bearer token)
 
-## 5) Criar usuario manual no PostgreSQL
+## 6) Criar usuario manual no PostgreSQL
 
 1. Gere hash da senha:
 ```bash
@@ -59,6 +75,6 @@ VALUES ('Cliente', 'zaqviana@gmail.com', '$2a$10...hash...')
 ON CONFLICT (email) DO NOTHING;
 ```
 
-## 6) Observacao importante
+## 7) Observacao importante
 
 As tabelas `users` e `app_states` sao criadas automaticamente ao iniciar o backend.
