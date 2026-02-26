@@ -36,6 +36,7 @@ const monthNames = [
 ];
 
 const refs = {
+  bootScreen: document.getElementById("bootScreen"),
   loginScreen: document.getElementById("loginScreen"),
   loginForm: document.getElementById("loginForm"),
   loginUser: document.getElementById("loginUser"),
@@ -145,7 +146,8 @@ const refs = {
   settingsName: document.getElementById("settingsName"),
   settingsEmail: document.getElementById("settingsEmail"),
   settingsPassword: document.getElementById("settingsPassword"),
-  settingsTheme: document.getElementById("settingsTheme"),
+  settingsThemeMode: document.getElementById("settingsThemeMode"),
+  settingsThemeColor: document.getElementById("settingsThemeColor"),
   deleteAccountBtn: document.getElementById("deleteAccountBtn"),
   settingsMessage: document.getElementById("settingsMessage"),
 
@@ -212,6 +214,7 @@ let authToken = "";
 const LOCAL_API_URL = "http://localhost:8787";
 const PROD_API_URL = "https://pulseboard-ai.onrender.com";
 const isLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
 let apiBase = String(window.API_URL || (isLocalhost ? LOCAL_API_URL : PROD_API_URL)).replace(/\/+$/, "");
 let saveTimer;
 let jarvisSending = false;
@@ -223,13 +226,300 @@ let editingTaskId = "";
 let editingAdminUserId = 0;
 let confirmActionHandler = null;
 let confirmBusy = false;
-const THEME_ORDER = ["light", "dark", "pastel-pink", "pastel-green", "pastel-blue", "pastel-purple", "black-red"];
+const THEME_MODE_ORDER = ["system", "dark", "light"];
+const THEME_MODES = ["system", "light", "dark"];
+const THEME_ACCENTS = ["neutral", "red", "blue", "green", "yellow", "orange", "pink", "purple"];
+const LEGACY_THEME_MAP = {
+  light: { themeMode: "light", themeAccent: "neutral" },
+  dark: { themeMode: "dark", themeAccent: "neutral" },
+  "pastel-pink": { themeMode: "light", themeAccent: "pink" },
+  "pastel-green": { themeMode: "light", themeAccent: "green" },
+  "pastel-blue": { themeMode: "light", themeAccent: "blue" },
+  "pastel-purple": { themeMode: "light", themeAccent: "purple" },
+  "black-red": { themeMode: "dark", themeAccent: "red" }
+};
+const THEME_PRESETS = {
+  neutral: {
+    light: {
+      accent: "#2f3137",
+      contrast: "#f6f7f8",
+      check: "#4f5d75",
+      moneyIn: "#2da568",
+      moneyOut: "#d45454",
+      chart: {
+        habitLine: "#4f5d75",
+        habitFill: "rgba(79,93,117,0.18)",
+        kcal: "#cf4d4d",
+        sleep: "#3e79cc",
+        water: "#2f9b74",
+        pie: ["#4f5d75", "#3f6f9b", "#2d3142", "#7f8fa4", "#bfc7d5", "#597493", "#9ab4cf"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#f0f3f8",
+      contrast: "#1a2028",
+      check: "#7d96bf",
+      moneyIn: "#36c57e",
+      moneyOut: "#ff6f6f",
+      chart: {
+        habitLine: "#9fb8da",
+        habitFill: "rgba(159,184,218,0.2)",
+        kcal: "#ff6f6f",
+        sleep: "#80b0ff",
+        water: "#4ed1a4",
+        pie: ["#7288ab", "#6080ab", "#4c5770", "#9aabc8", "#d5def0", "#86a0c4", "#b9cbe5"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  red: {
+    light: {
+      accent: "#e03b4f",
+      contrast: "#ffffff",
+      check: "#cc4f62",
+      moneyIn: "#2da568",
+      moneyOut: "#d45454",
+      chart: {
+        habitLine: "#d94157",
+        habitFill: "rgba(217,65,87,0.18)",
+        kcal: "#e03b4f",
+        sleep: "#5a74d8",
+        water: "#2f9b74",
+        pie: ["#e03b4f", "#ca4c6f", "#9f586d", "#d47884", "#f0bec4", "#ad4358", "#f5d9dc"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#ff4d6d",
+      contrast: "#1e0f15",
+      check: "#ff708d",
+      moneyIn: "#36c57e",
+      moneyOut: "#ff6f6f",
+      chart: {
+        habitLine: "#ff6b85",
+        habitFill: "rgba(255,107,133,0.2)",
+        kcal: "#ff7d8f",
+        sleep: "#7fa6ff",
+        water: "#54d7ab",
+        pie: ["#ff4d6d", "#f56f8a", "#be6e84", "#e08fa4", "#f5c7d2", "#d15e7b", "#fadbe3"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  blue: {
+    light: {
+      accent: "#3d74d8",
+      contrast: "#ffffff",
+      check: "#4f79c4",
+      moneyIn: "#2f9a57",
+      moneyOut: "#b55151",
+      chart: {
+        habitLine: "#3d74d8",
+        habitFill: "rgba(61,116,216,0.18)",
+        kcal: "#c15b5b",
+        sleep: "#3d74d8",
+        water: "#2f9b74",
+        pie: ["#3d74d8", "#547fc9", "#5f7392", "#7d9cd6", "#bfd4f8", "#6a8fcb", "#dbe7fb"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#78a8ff",
+      contrast: "#10203a",
+      check: "#8eb7ff",
+      moneyIn: "#36c57e",
+      moneyOut: "#ff6f6f",
+      chart: {
+        habitLine: "#8ab5ff",
+        habitFill: "rgba(138,181,255,0.2)",
+        kcal: "#ff8d86",
+        sleep: "#88b4ff",
+        water: "#57d4ab",
+        pie: ["#78a8ff", "#8ab2f1", "#7890c0", "#9db8ea", "#d3e1fb", "#7f9fd9", "#e2ebff"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  green: {
+    light: {
+      accent: "#2f9f6b",
+      contrast: "#ffffff",
+      check: "#3f966f",
+      moneyIn: "#2f9f6b",
+      moneyOut: "#b55151",
+      chart: {
+        habitLine: "#2f9f6b",
+        habitFill: "rgba(47,159,107,0.18)",
+        kcal: "#c5645e",
+        sleep: "#5f7ecf",
+        water: "#2f9f6b",
+        pie: ["#2f9f6b", "#4ca679", "#638f78", "#8dc3a4", "#d2ecdd", "#5f9f83", "#e0f3e7"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#5fd69a",
+      contrast: "#132a1f",
+      check: "#76e0ae",
+      moneyIn: "#5fd69a",
+      moneyOut: "#ff6f6f",
+      chart: {
+        habitLine: "#78e2ae",
+        habitFill: "rgba(120,226,174,0.2)",
+        kcal: "#ff8f87",
+        sleep: "#8ab0ff",
+        water: "#6ae3bb",
+        pie: ["#5fd69a", "#79d9aa", "#78a790", "#9ad8b7", "#d6f3e5", "#70c49a", "#e5f8ef"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  yellow: {
+    light: {
+      accent: "#d8a600",
+      contrast: "#221b06",
+      check: "#be9a2d",
+      moneyIn: "#2f9a57",
+      moneyOut: "#b55151",
+      chart: {
+        habitLine: "#c89500",
+        habitFill: "rgba(200,149,0,0.2)",
+        kcal: "#c8654f",
+        sleep: "#5676cb",
+        water: "#3c9d7b",
+        pie: ["#d8a600", "#d09e31", "#b68f4c", "#d4b36d", "#f1e1b2", "#b48720", "#f7edcf"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#ffd24d",
+      contrast: "#2a220d",
+      check: "#ffde7f",
+      moneyIn: "#5fd69a",
+      moneyOut: "#ff7f7f",
+      chart: {
+        habitLine: "#ffda6d",
+        habitFill: "rgba(255,218,109,0.22)",
+        kcal: "#ff9d84",
+        sleep: "#90b5ff",
+        water: "#6bdcb5",
+        pie: ["#ffd24d", "#f3c967", "#cfb16a", "#e7ce8d", "#f8ebc8", "#d5b447", "#fff2d6"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  orange: {
+    light: {
+      accent: "#dc6f2f",
+      contrast: "#ffffff",
+      check: "#c07a51",
+      moneyIn: "#2f9a57",
+      moneyOut: "#b55151",
+      chart: {
+        habitLine: "#dc6f2f",
+        habitFill: "rgba(220,111,47,0.18)",
+        kcal: "#cc5c4a",
+        sleep: "#5a78cc",
+        water: "#3f9e80",
+        pie: ["#dc6f2f", "#cd834f", "#b08467", "#d4a17f", "#efd5c3", "#c26125", "#f6e5db"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#ff9a5c",
+      contrast: "#2f1909",
+      check: "#ffb685",
+      moneyIn: "#5fd69a",
+      moneyOut: "#ff7f7f",
+      chart: {
+        habitLine: "#ffad79",
+        habitFill: "rgba(255,173,121,0.22)",
+        kcal: "#ff9f89",
+        sleep: "#90b4ff",
+        water: "#6fdfbd",
+        pie: ["#ff9a5c", "#f3a274", "#cf9b79", "#e2b595", "#f5dfd0", "#d9854f", "#fae9df"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  pink: {
+    light: {
+      accent: "#d86aa0",
+      contrast: "#ffffff",
+      check: "#c277a1",
+      moneyIn: "#3baf7a",
+      moneyOut: "#c7516c",
+      chart: {
+        habitLine: "#d86aa0",
+        habitFill: "rgba(216,106,160,0.18)",
+        kcal: "#ca5f69",
+        sleep: "#7a89d8",
+        water: "#4ea786",
+        pie: ["#d86aa0", "#c989b8", "#b188a2", "#c6b2cf", "#e9d7e2", "#a285c2", "#f1bfd0"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#ff8ec2",
+      contrast: "#321225",
+      check: "#ffaad3",
+      moneyIn: "#5fd69a",
+      moneyOut: "#ff8aa4",
+      chart: {
+        habitLine: "#ff9ecd",
+        habitFill: "rgba(255,158,205,0.22)",
+        kcal: "#ff95a3",
+        sleep: "#a1b4ff",
+        water: "#72e4c2",
+        pie: ["#ff8ec2", "#f39ec9", "#c68ba9", "#dfb2ca", "#f6dcea", "#d978b1", "#fae7f2"],
+        pieBorder: "#111419"
+      }
+    }
+  },
+  purple: {
+    light: {
+      accent: "#8c66d9",
+      contrast: "#ffffff",
+      check: "#7f74c4",
+      moneyIn: "#3a9b76",
+      moneyOut: "#b55555",
+      chart: {
+        habitLine: "#8c66d9",
+        habitFill: "rgba(140,102,217,0.18)",
+        kcal: "#cb6a7a",
+        sleep: "#6f86d6",
+        water: "#4d9f8a",
+        pie: ["#8c66d9", "#8d84c6", "#7e6aa6", "#b7a0df", "#e8defa", "#927dc3", "#cbb8eb"],
+        pieBorder: "#ffffff"
+      }
+    },
+    dark: {
+      accent: "#b594ff",
+      contrast: "#261445",
+      check: "#c5adff",
+      moneyIn: "#5fd69a",
+      moneyOut: "#ff8b8b",
+      chart: {
+        habitLine: "#c3aaff",
+        habitFill: "rgba(195,170,255,0.22)",
+        kcal: "#ff97a7",
+        sleep: "#a9bfff",
+        water: "#78e3c4",
+        pie: ["#b594ff", "#b2a4ea", "#9786c4", "#cab8f4", "#ece4ff", "#a793de", "#ddd0ff"],
+        pieBorder: "#111419"
+      }
+    }
+  }
+};
 let currentUser = null;
 let adminUsers = [];
 let currentStateOwnerId = 0;
+let systemThemeListenerBound = false;
 bootstrap();
 
 async function bootstrap() {
+  showBootstrapLoading();
   refs.todayChip.textContent = formatDate(todayKey);
   refs.healthDate.value = todayKey;
   refs.txDate.value = todayKey;
@@ -243,7 +533,7 @@ async function bootstrap() {
   refs.settingsName.value = state.settings.name;
   refs.settingsEmail.value = state.settings.email;
   refs.settingsPassword.value = state.settings.password;
-  refs.settingsTheme.value = state.settings.theme;
+  syncThemeControlsFromState();
   refs.goalKcal.value = state.healthGoals.kcal || "";
   refs.goalSleep.value = state.healthGoals.sleep || "";
   refs.goalWater.value = state.healthGoals.water || "";
@@ -251,33 +541,98 @@ async function bootstrap() {
 
   buildMenu();
   bindEvents();
-  applyTheme(state.settings.theme);
+  applyTheme();
   hydrateCategorySelects();
   hydrateMonthFilters();
 
   const session = loadSession();
   updateJarvisSendState();
 
-  if (session?.token) {
-    authToken = session.token;
-    try {
-      const me = await apiRequest("/api/auth/me");
-      if (me?.user) {
-        applyLoggedUser(me.user);
-        await pullRemoteState();
-        if (isAdminUser()) await loadAdminUsers();
-        showApp();
-      } else {
-        showLogin();
-      }
-    } catch {
-      showLogin();
-    }
+  const restored = await restoreSession(session);
+  if (restored) {
+    showApp();
   } else {
     showLogin();
   }
 
   renderAll();
+}
+
+async function restoreSession(session) {
+  if (!session?.token) return false;
+
+  authToken = session.token;
+  if (session.user) {
+    applyLoggedUser(session.user);
+  }
+
+  const restoreResult = await fetchCurrentUserWithRetry(3);
+  if (restoreResult.user) {
+    applyLoggedUser(restoreResult.user);
+    saveSession({ token: authToken, user: restoreResult.user });
+    await pullRemoteState();
+    if (isAdminUser()) await loadAdminUsers();
+    return true;
+  }
+
+  if (restoreResult.invalidToken) {
+    clearSessionLocal();
+    return false;
+  }
+
+  if (session.user) {
+    await pullRemoteState();
+    if (isAdminUser()) void loadAdminUsers();
+    return true;
+  }
+
+  return false;
+}
+
+async function fetchCurrentUserWithRetry(maxAttempts = 3) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const me = await apiRequest("/api/auth/me");
+      if (me?.user) return { user: me.user, error: null, invalidToken: false };
+      return { user: null, error: null, invalidToken: false };
+    } catch (error) {
+      lastError = error;
+      if (isSessionAuthError(error)) {
+        return { user: null, error, invalidToken: true };
+      }
+      if (!shouldRetrySessionValidation(error) || attempt >= maxAttempts) {
+        break;
+      }
+      await wait(500 * attempt);
+    }
+  }
+
+  return { user: null, error: lastError, invalidToken: false };
+}
+
+function isSessionAuthError(error) {
+  const status = Number(error?.status || 0);
+  return status === 401 || status === 403;
+}
+
+function shouldRetrySessionValidation(error) {
+  const status = Number(error?.status || 0);
+  if (!status) return true;
+  return status >= 500;
+}
+
+function clearSessionLocal() {
+  localStorage.removeItem(SESSION_KEY);
+  authToken = "";
+  currentUser = null;
+  currentStateOwnerId = 0;
+  adminUsers = [];
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function bindEvents() {
@@ -376,13 +731,24 @@ function bindEvents() {
     if (event.target === refs.adminUserEditModal) closeAdminUserEditModal();
   });
 
-  refs.settingsTheme.addEventListener("change", () => {
-    state.settings.theme = refs.settingsTheme.value;
-    applyTheme(state.settings.theme);
-    renderAll();
-    persist();
+  [refs.settingsThemeMode, refs.settingsThemeColor].forEach((el) => {
+    el.addEventListener("change", onThemeSettingsChange);
   });
   refs.deleteAccountBtn.addEventListener("click", onDeleteAccount);
+
+  if (!systemThemeListenerBound) {
+    const onSystemThemeChange = () => {
+      if (state.settings.themeMode !== "system") return;
+      applyTheme();
+      renderAll();
+    };
+    if (typeof systemThemeQuery.addEventListener === "function") {
+      systemThemeQuery.addEventListener("change", onSystemThemeChange);
+    } else if (typeof systemThemeQuery.addListener === "function") {
+      systemThemeQuery.addListener(onSystemThemeChange);
+    }
+    systemThemeListenerBound = true;
+  }
 
   refs.habitEditForm.addEventListener("submit", onHabitEditSubmit);
   refs.habitEditCancelBtn.addEventListener("click", closeHabitEditModal);
@@ -466,18 +832,24 @@ async function onLoginSubmit(event) {
     refs.loginForm.reset();
     showApp();
     renderAll();
-  } catch (_error) {
-    refs.loginError.textContent = "Email ou senha incorreto";
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    if (status === 401 || status === 403) {
+      refs.loginError.textContent = "Email ou senha incorreto";
+      return;
+    }
+    if (status === 0) {
+      refs.loginError.textContent = "Não foi possível conectar com o servidor de login.";
+      return;
+    }
+    refs.loginError.textContent = "Não foi possível fazer login agora. Tente novamente.";
   }
 }
 
 function onLogout() {
   clearTimeout(saveTimer);
-  localStorage.removeItem(SESSION_KEY);
-  authToken = "";
-  currentUser = null;
-  currentStateOwnerId = 0;
-  adminUsers = [];
+  clearSessionLocal();
+  refs.loginError.textContent = "";
   if (refs.settingsMessage) refs.settingsMessage.textContent = "";
   buildMenu();
   showLogin();
@@ -674,8 +1046,10 @@ async function onSettingsSubmit(event) {
     });
 
     applyLoggedUser(result?.user || { name, email });
-    state.settings.theme = refs.settingsTheme.value;
-    applyTheme(state.settings.theme);
+    state.settings.themeMode = normalizeThemeMode(refs.settingsThemeMode.value);
+    state.settings.themeAccent = normalizeThemeAccent(refs.settingsThemeColor.value);
+    syncThemeControlsFromState();
+    applyTheme();
     refs.settingsPassword.value = "";
     if (result?.token) {
       authToken = result.token;
@@ -688,26 +1062,50 @@ async function onSettingsSubmit(event) {
   }
 }
 
+function showBootstrapLoading() {
+  refs.bootScreen.classList.remove("hidden");
+  refs.loginScreen.classList.add("hidden");
+  refs.appShell.classList.add("hidden");
+}
+
 function showLogin() {
+  refs.bootScreen.classList.add("hidden");
   refs.loginScreen.classList.remove("hidden");
   refs.appShell.classList.add("hidden");
   updateJarvisSendState();
 }
 
 function showApp() {
+  refs.bootScreen.classList.add("hidden");
   refs.loginScreen.classList.add("hidden");
   refs.appShell.classList.remove("hidden");
   updateJarvisSendState();
 }
 
 function onThemeToggle() {
-  const currentIndex = THEME_ORDER.indexOf(state.settings.theme);
-  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % THEME_ORDER.length : 0;
-  state.settings.theme = THEME_ORDER[nextIndex];
-  refs.settingsTheme.value = state.settings.theme;
-  applyTheme(state.settings.theme);
+  const currentMode = normalizeThemeMode(state.settings.themeMode);
+  const currentIndex = THEME_MODE_ORDER.indexOf(currentMode);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % THEME_MODE_ORDER.length : 0;
+  state.settings.themeMode = THEME_MODE_ORDER[nextIndex];
+  syncThemeControlsFromState();
+  applyTheme();
   renderAll();
   persist();
+}
+
+function onThemeSettingsChange() {
+  state.settings.themeMode = normalizeThemeMode(refs.settingsThemeMode.value);
+  state.settings.themeAccent = normalizeThemeAccent(refs.settingsThemeColor.value);
+  syncThemeControlsFromState();
+  applyTheme();
+  renderAll();
+  persist();
+}
+
+function syncThemeControlsFromState() {
+  state.settings = normalizeThemeSettings(state.settings);
+  refs.settingsThemeMode.value = state.settings.themeMode;
+  refs.settingsThemeColor.value = state.settings.themeAccent;
 }
 
 function buildMenu() {
@@ -874,6 +1272,34 @@ function normalizeTaskOrder(date) {
   });
 }
 
+function findTaskByDateAndTitle(title, date = todayKey) {
+  const key = normalize(title);
+  if (!key) return null;
+  const sameDay = state.tasks.filter((task) => task.date === date);
+  const exact = sameDay.find((task) => normalize(task.title) === key);
+  if (exact) return exact;
+  const partial = sameDay.find((task) => {
+    const taskKey = normalize(task.title);
+    return taskKey.includes(key) || key.includes(taskKey);
+  });
+  return partial || null;
+}
+
+function createTaskByDate(title, date = todayKey, done = false) {
+  const safeTitle = String(title || "").trim();
+  if (!safeTitle) return null;
+  const task = {
+    id: crypto.randomUUID(),
+    title: safeTitle,
+    date,
+    done: Boolean(done),
+    sortOrder: nextTaskSortOrder(date)
+  };
+  state.tasks.push(task);
+  normalizeTaskOrder(date);
+  return task;
+}
+
 function moveTask(task, direction) {
   const list = orderedTasksByDate(task.date);
   const from = list.findIndex((item) => item.id === task.id);
@@ -993,13 +1419,14 @@ function updateJarvisSendState() {
 function formatJarvisError(error) {
   const msg = String(error?.message || "");
   const lower = msg.toLowerCase();
-  if (lower.includes("429") || lower.includes("quota") || lower.includes("billing")) {
+  const status = Number(error?.status || 0);
+  if (status === 429 || lower.includes("429") || lower.includes("quota") || lower.includes("billing")) {
     return "Seu limite da IA foi atingido. Verifique plano e faturamento da API.";
   }
-  if (lower.includes("401") || lower.includes("api key") || lower.includes("incorrect api key")) {
+  if (status === 401 || lower.includes("401") || lower.includes("api key") || lower.includes("incorrect api key")) {
     return "Chave da IA inválida ou ausente no backend.";
   }
-  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+  if (status === 0 || lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("falha de conexão")) {
     return `Não foi possível conectar ao backend Jarvis (${apiBase}).`;
   }
   if (lower.includes("status code (no body)") || lower.includes("requisição")) {
@@ -1013,7 +1440,7 @@ function applyJarvisActions(actions) {
 
   actions.forEach((action) => {
     const actionType = normalize(action?.type || "");
-    const actionDate = String(action?.date || todayKey);
+    const actionDate = normalizeActionDate(action?.date);
 
     if (actionType === "transaction") {
       const txType = ["income", "expense", "investment"].includes(action.txType) ? action.txType : "expense";
@@ -1029,6 +1456,64 @@ function applyJarvisActions(actions) {
         });
         applied.push(`Transação ${txType}: ${formatCurrency(amount)}`);
       }
+      return;
+    }
+
+    if (["task_add", "task_create", "add_task", "create_task", "tarefa_add"].includes(actionType)) {
+      const title = String(action.title || action.name || "").trim();
+      if (!title) return;
+      const existing = findTaskByDateAndTitle(title, actionDate);
+      if (existing) {
+        applied.push(`Tarefa já existe: ${existing.title} (${formatDate(actionDate)})`);
+        return;
+      }
+      const created = createTaskByDate(title, actionDate, false);
+      if (created) {
+        applied.push(`Tarefa criada: ${created.title} (${formatDate(actionDate)})`);
+      }
+      return;
+    }
+
+    if (["task_done", "task_complete", "complete_task", "task_check"].includes(actionType)) {
+      const title = String(action.title || action.name || "").trim();
+      if (!title) return;
+      const found = findTaskByDateAndTitle(title, actionDate);
+      if (found) {
+        found.done = true;
+        applied.push(`Tarefa concluída: ${found.title} (${formatDate(actionDate)})`);
+        return;
+      }
+      const created = createTaskByDate(title, actionDate, true);
+      if (created) {
+        applied.push(`Tarefa criada e concluída: ${created.title} (${formatDate(actionDate)})`);
+      }
+      return;
+    }
+
+    if (["task_undo", "task_uncheck", "task_reopen", "undo_task"].includes(actionType)) {
+      const title = String(action.title || action.name || "").trim();
+      if (!title) return;
+      const found = findTaskByDateAndTitle(title, actionDate);
+      if (!found) {
+        applied.push(`Não encontrei a tarefa "${title}" em ${formatDate(actionDate)}.`);
+        return;
+      }
+      found.done = false;
+      applied.push(`Tarefa reaberta: ${found.title} (${formatDate(actionDate)})`);
+      return;
+    }
+
+    if (["task_delete", "task_remove", "remove_task", "delete_task"].includes(actionType)) {
+      const title = String(action.title || action.name || "").trim();
+      if (!title) return;
+      const found = findTaskByDateAndTitle(title, actionDate);
+      if (!found) {
+        applied.push(`Não encontrei a tarefa "${title}" para excluir.`);
+        return;
+      }
+      state.tasks = state.tasks.filter((task) => task.id !== found.id);
+      normalizeTaskOrder(actionDate);
+      applied.push(`Tarefa excluída: ${found.title} (${formatDate(actionDate)})`);
       return;
     }
 
@@ -1065,6 +1550,12 @@ function applyJarvisActions(actions) {
   });
 
   return applied;
+}
+
+function normalizeActionDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return todayKey;
 }
 
 function renderHabits() {
@@ -1697,87 +2188,15 @@ function baseLineOptions(hideLegend, min, max) {
 }
 
 function getChartPalette() {
-  const theme = state.settings.theme || "light";
-  const palettes = {
-    light: {
-      habitLine: "#3d556b",
-      habitFill: "rgba(61,85,107,0.15)",
-      kcal: "#cf4d4d",
-      sleep: "#3e79cc",
-      water: "#2f9b74",
-      pie: ["#4f5d75", "#3f6f9b", "#2d3142", "#7f8fa4", "#bfc7d5", "#597493", "#9ab4cf"],
-      pieBorder: "#ffffff",
-      gridStrong: "rgba(125,136,153,0.2)",
-      gridSoft: "rgba(125,136,153,0.15)"
-    },
-    dark: {
-      habitLine: "#7aa6d1",
-      habitFill: "rgba(122,166,209,0.18)",
-      kcal: "#ff6f6f",
-      sleep: "#6ea9ff",
-      water: "#49c99a",
-      pie: ["#5f7392", "#496a8f", "#3d465f", "#8fa1be", "#ced6e6", "#6e88ad", "#a9c2df"],
-      pieBorder: "#111419",
-      gridStrong: "rgba(112,126,148,0.26)",
-      gridSoft: "rgba(112,126,148,0.2)"
-    },
-    "pastel-pink": {
-      habitLine: "#b45f86",
-      habitFill: "rgba(180,95,134,0.18)",
-      kcal: "#ca5f69",
-      sleep: "#7a89d8",
-      water: "#4ea786",
-      pie: ["#d8749c", "#c989b8", "#b188a2", "#c6b2cf", "#e9d7e2", "#a285c2", "#f1bfd0"],
-      pieBorder: "#ffffff",
-      gridStrong: "rgba(170,128,145,0.24)",
-      gridSoft: "rgba(170,128,145,0.18)"
-    },
-    "pastel-green": {
-      habitLine: "#4f9b67",
-      habitFill: "rgba(79,155,103,0.18)",
-      kcal: "#ce6a62",
-      sleep: "#6a91cc",
-      water: "#42a27a",
-      pie: ["#4fa46b", "#6aaf84", "#7a9f87", "#9cc9a9", "#d5ebdb", "#7ab389", "#bfdcc7"],
-      pieBorder: "#ffffff",
-      gridStrong: "rgba(101,139,112,0.24)",
-      gridSoft: "rgba(101,139,112,0.18)"
-    },
-    "pastel-blue": {
-      habitLine: "#5a8fd8",
-      habitFill: "rgba(90,143,216,0.18)",
-      kcal: "#c46666",
-      sleep: "#4c7fca",
-      water: "#3ea084",
-      pie: ["#5a8fd8", "#6f95c9", "#5f7392", "#8aa8d6", "#d8e6fa", "#7396c8", "#b9cfee"],
-      pieBorder: "#ffffff",
-      gridStrong: "rgba(100,130,170,0.24)",
-      gridSoft: "rgba(100,130,170,0.18)"
-    },
-    "pastel-purple": {
-      habitLine: "#9a79d8",
-      habitFill: "rgba(154,121,216,0.18)",
-      kcal: "#cb6a7a",
-      sleep: "#6f86d6",
-      water: "#4d9f8a",
-      pie: ["#9a79d8", "#8d84c6", "#7e6aa6", "#b7a0df", "#e8defa", "#927dc3", "#cbb8eb"],
-      pieBorder: "#ffffff",
-      gridStrong: "rgba(130,114,164,0.24)",
-      gridSoft: "rgba(130,114,164,0.18)"
-    },
-    "black-red": {
-      habitLine: "#ff5a70",
-      habitFill: "rgba(255,90,112,0.18)",
-      kcal: "#ff6b6b",
-      sleep: "#87a7ff",
-      water: "#4fc99c",
-      pie: ["#ff3b52", "#d54f78", "#6f788f", "#9ca6be", "#d4d8e7", "#b94b73", "#7f8da9"],
-      pieBorder: "#0e0e12",
-      gridStrong: "rgba(125,125,142,0.24)",
-      gridSoft: "rgba(125,125,142,0.18)"
-    }
+  const mode = getResolvedThemeMode(state.settings.themeMode);
+  const accent = normalizeThemeAccent(state.settings.themeAccent);
+  const preset = THEME_PRESETS[accent]?.[mode] || THEME_PRESETS.neutral[mode];
+
+  return {
+    ...preset.chart,
+    gridStrong: mode === "dark" ? "rgba(112,126,148,0.26)" : "rgba(125,136,153,0.2)",
+    gridSoft: mode === "dark" ? "rgba(112,126,148,0.2)" : "rgba(125,136,153,0.15)"
   };
-  return palettes[theme] || palettes.light;
 }
 function renderJournal() {
   const dateKey = state.ui.journalDate || todayKey;
@@ -1940,10 +2359,72 @@ function escapeHtml(text) {
     .replaceAll("'", "&#39;");
 }
 
-function applyTheme(theme) {
-  const next = THEME_ORDER.includes(theme) ? theme : "light";
-  document.body.classList.remove("theme-light", "theme-dark", "theme-pastel-pink", "theme-pastel-green", "theme-pastel-blue", "theme-pastel-purple", "theme-black-red");
-  document.body.classList.add(`theme-${next}`);
+function normalizeThemeMode(mode) {
+  return THEME_MODES.includes(mode) ? mode : "system";
+}
+
+function normalizeThemeAccent(accent) {
+  return THEME_ACCENTS.includes(accent) ? accent : "neutral";
+}
+
+function normalizeThemeSettings(settings) {
+  const safe = settings && typeof settings === "object" ? settings : {};
+  let themeMode = normalizeThemeMode(safe.themeMode);
+  let themeAccent = normalizeThemeAccent(safe.themeAccent);
+
+  if ((!safe.themeMode || !safe.themeAccent) && safe.theme && LEGACY_THEME_MAP[safe.theme]) {
+    themeMode = LEGACY_THEME_MAP[safe.theme].themeMode;
+    themeAccent = LEGACY_THEME_MAP[safe.theme].themeAccent;
+  }
+
+  return {
+    ...safe,
+    themeMode,
+    themeAccent
+  };
+}
+
+function getResolvedThemeMode(mode) {
+  const normalizedMode = normalizeThemeMode(mode);
+  if (normalizedMode === "system") {
+    return systemThemeQuery.matches ? "dark" : "light";
+  }
+  return normalizedMode;
+}
+
+function getActiveThemePreset(mode = state.settings.themeMode, accent = state.settings.themeAccent) {
+  const resolvedMode = getResolvedThemeMode(mode);
+  const normalizedAccent = normalizeThemeAccent(accent);
+  const preset = THEME_PRESETS[normalizedAccent]?.[resolvedMode] || THEME_PRESETS.neutral[resolvedMode];
+  return { preset, resolvedMode, normalizedAccent };
+}
+
+function applyTheme() {
+  const { preset, resolvedMode, normalizedAccent } = getActiveThemePreset();
+  const selectedMode = normalizeThemeMode(state.settings.themeMode);
+  document.body.classList.remove(
+    "theme-light",
+    "theme-dark",
+    "theme-pastel-pink",
+    "theme-pastel-green",
+    "theme-pastel-blue",
+    "theme-pastel-purple",
+    "theme-black-red"
+  );
+  document.body.classList.add(`theme-${resolvedMode}`);
+  document.body.dataset.themeMode = selectedMode;
+  document.body.dataset.themeResolved = resolvedMode;
+  document.body.dataset.themeAccent = normalizedAccent;
+  document.body.style.setProperty("--accent", preset.accent);
+  document.body.style.setProperty("--accent-contrast", preset.contrast);
+  document.body.style.setProperty("--check-accent", preset.check);
+  document.body.style.setProperty("--money-in-color", preset.moneyIn);
+  document.body.style.setProperty("--money-out-color", preset.moneyOut);
+  refs.themeToggleBtn.textContent = selectedMode === "system"
+    ? "Tema: Sistema"
+    : selectedMode === "dark"
+      ? "Tema: Escuro"
+      : "Tema: Claro";
 }
 
 function openHabitEditModal(habitId) {
@@ -2137,7 +2618,8 @@ function defaultState() {
       name: "Usuário",
       email: "usuario@email.com",
       password: "",
-      theme: "light"
+      themeMode: "system",
+      themeAccent: "neutral"
     },
     ui: {
       activeView: "dashboard",
@@ -2164,7 +2646,7 @@ function loadState() {
     return {
       ...base,
       ...parsed,
-      settings: { ...base.settings, ...(parsed.settings || {}) },
+      settings: normalizeThemeSettings({ ...base.settings, ...(parsed.settings || {}) }),
       ui: { ...base.ui, ...(parsed.ui || {}) },
       healthGoals: { ...base.healthGoals, ...(parsed.healthGoals || {}) },
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map((task) => ({
@@ -2192,7 +2674,14 @@ function loadSession() {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const token = String(parsed.token || "").trim();
+    if (!token) return null;
+    return {
+      token,
+      user: parsed.user && typeof parsed.user === "object" ? parsed.user : null
+    };
   } catch (_error) {
     return null;
   }
@@ -2245,7 +2734,7 @@ function hydrateStateFromRemote(remote) {
   const merged = {
     ...base,
     ...remote,
-    settings: { ...base.settings, ...(remote.settings || {}) },
+    settings: normalizeThemeSettings({ ...base.settings, ...(remote.settings || {}) }),
     ui: { ...state.ui, ...(remote.ui || {}) },
     healthGoals: { ...base.healthGoals, ...(remote.healthGoals || {}) },
     tasks: Array.isArray(remote.tasks) ? remote.tasks.map((task) => ({
@@ -2263,6 +2752,8 @@ function hydrateStateFromRemote(remote) {
 
   Object.keys(state).forEach((key) => { delete state[key]; });
   Object.assign(state, merged);
+  syncThemeControlsFromState();
+  applyTheme();
 }
 
 async function apiRequest(endpoint, options = {}, requireAuth = true) {
@@ -2271,9 +2762,22 @@ async function apiRequest(endpoint, options = {}, requireAuth = true) {
     ...(options.headers || {})
   };
   if (requireAuth && authToken) headers.Authorization = `Bearer ${authToken}`;
-  const res = await fetch(`${apiBase}${endpoint}`, { ...options, headers });
+  let res;
+  try {
+    res = await fetch(`${apiBase}${endpoint}`, { ...options, headers });
+  } catch (error) {
+    const networkError = new Error(`Falha de conexão com ${apiBase}`);
+    networkError.status = 0;
+    networkError.cause = error;
+    throw networkError;
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error || `Erro HTTP ${res.status}`);
+  if (!res.ok) {
+    const apiError = new Error(data?.error || `Erro HTTP ${res.status}`);
+    apiError.status = res.status;
+    apiError.payload = data;
+    throw apiError;
+  }
   return data;
 }
 

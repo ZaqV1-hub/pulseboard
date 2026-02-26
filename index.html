@@ -10,7 +10,15 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <section class="login-screen" id="loginScreen">
+  <section class="boot-screen" id="bootScreen">
+    <div class="boot-card">
+      <div class="boot-spinner" aria-hidden="true"></div>
+      <h2>Carregando PulseBoard...</h2>
+      <p class="muted">Validando sua sessão e preparando seu painel.</p>
+    </div>
+  </section>
+
+  <section class="login-screen hidden" id="loginScreen">
     <form class="login-card" id="loginForm">
       <h1 class="brand-inline">
         <span class="brand-icon" aria-hidden="true">
@@ -86,7 +94,7 @@
         <article class="card jarvis-chat-card">
           <div class="jarvis-topbar">
             <h3>Jarvis</h3>
-            <p class="muted">Conversa natural. Se você pedir para registrar, eu salvo no app.</p>
+            <p class="muted">Seu assistente de rotina, tarefas e hábitos. Pode mandar mensagem a qualquer hora.</p>
           </div>
           <div id="jarvisHistory" class="chat-thread jarvis-thread"></div>
           <form id="jarvisForm" class="chat-form jarvis-inputbar">
@@ -282,7 +290,25 @@
             <label>Nome<input id="settingsName" type="text" required></label>
             <label>Email<input id="settingsEmail" type="email" required></label>
             <label>Nova senha<input id="settingsPassword" type="password" placeholder="Deixe vazio para manter"></label>
-            <label>Tema<select id="settingsTheme"><option value="light">Claro</option><option value="dark">Escuro</option><option value="pastel-pink">Pastel rosa</option><option value="pastel-green">Pastel verde</option><option value="pastel-blue">Pastel azul</option><option value="pastel-purple">Pastel roxo</option><option value="black-red">Preto e vermelho</option></select></label>
+            <label>Modo do tema
+              <select id="settingsThemeMode">
+                <option value="system">Padrão do sistema</option>
+                <option value="light">Claro</option>
+                <option value="dark">Escuro</option>
+              </select>
+            </label>
+            <label>Cor do tema
+              <select id="settingsThemeColor">
+                <option value="neutral">Preto e branco (padrão)</option>
+                <option value="red">Vermelho</option>
+                <option value="blue">Azul</option>
+                <option value="green">Verde</option>
+                <option value="yellow">Amarelo</option>
+                <option value="orange">Laranja</option>
+                <option value="pink">Rosa</option>
+                <option value="purple">Roxo</option>
+              </select>
+            </label>
             <button class="btn" type="submit">Salvar configurações</button>
             <button class="btn danger" id="deleteAccountBtn" type="button">Excluir conta</button>
           </form>

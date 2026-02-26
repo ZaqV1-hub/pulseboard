@@ -318,23 +318,32 @@ app.post("/api/jarvis", authRequired, async (req, res) => {
     const client = new OpenAI({ apiKey: aiApiKey, baseURL: aiBaseURL });
 
     const systemPrompt = `
-Você é a assistente pessoal do usuário no app PulseBoard.
-Converse de forma natural, clara e útil, em português do Brasil.
-Pode responder com detalhes quando o usuário pedir explicações.
+Você é a assistente pessoal premium do usuário no PulseBoard.
+Fale em português do Brasil, com tom humano, direto e útil.
+Você tem acesso ao contexto real de tarefas, hábitos, saúde e finanças.
+
+Objetivo principal:
+- Ajudar o usuário a executar o dia com foco.
+- Lembrar pendências importantes.
+- Sugerir rotina/priorização com base nas tarefas e hábitos do contexto.
 
 Regras de comportamento:
-- Seja conversacional. Você NÃO precisa registrar ações em toda mensagem.
-- Só gere actions quando houver pedido explícito de registro/alteração (ex.: "registre", "salve", "anote", "lance", "marque", "desmarque", "edite", "apague").
-- Para kcal, água, sono e alimentação: se não houver pedido explícito para salvar no app, responda com orientação/cálculo e actions vazio.
-- Se o usuário corrigir algo (ex.: "não treinei jiu"), gere ação de desfazer.
-- Nunca invente valores/categorias que não foram citados.
-- O campo summary pode ser uma resposta longa e detalhada quando fizer sentido.
+- Seja conversacional. Nem toda resposta precisa ter actions.
+- Se o usuário pedir "organize meu dia", "me lembre", "o que falta", "rotina", entregue um plano prático por blocos de horário e prioridades (summary detalhado).
+- Só gere actions quando houver pedido explícito para registrar/alterar dados no app (ex.: "registre", "salve", "anote", "lance", "marque", "desmarque", "edite", "apague", "adicione tarefa").
+- Se o usuário corrigir algo ("não fiz", "desfaz"), gere action de desfazer/remover.
+- Não invente valores, categorias ou tarefas.
+- Para kcal/sono/água sem pedido explícito de salvar, responda com orientação e deixe actions vazio.
 
 Responda SOMENTE JSON válido neste formato:
 {
   "summary": "resposta conversacional para o usuário",
   "actions": [
     {"type":"transaction","date":"YYYY-MM-DD","txType":"income|expense|investment","category":"string","amount":123.45,"note":"string"},
+    {"type":"task_add","title":"string","date":"YYYY-MM-DD"},
+    {"type":"task_done","title":"string","date":"YYYY-MM-DD"},
+    {"type":"task_undo","title":"string","date":"YYYY-MM-DD"},
+    {"type":"task_delete","title":"string","date":"YYYY-MM-DD"},
     {"type":"habit_done","name":"string","date":"YYYY-MM-DD"},
     {"type":"habit_undo","name":"string","date":"YYYY-MM-DD"},
     {"type":"kcal","value":2200,"date":"YYYY-MM-DD"},
@@ -572,13 +581,45 @@ function resolveCorsOrigin(rawValue) {
     .map((item) => item.trim())
     .filter(Boolean);
 
+  const allowedSet = new Set(allowed);
+  const hasLoopbackInAllowed = allowed.some((origin) => isLoopbackOrigin(origin));
+  for (const origin of allowed) {
+    const pair = localhostPair(origin);
+    if (pair) allowedSet.add(pair);
+  }
+
+  const expandedAllowed = [...allowedSet];
+
   if (!allowed.length) return true;
-  if (allowed.length === 1) return allowed[0];
+  if (expandedAllowed.length === 1) return expandedAllowed[0];
 
   return (origin, callback) => {
-    if (!origin || allowed.includes(origin)) return callback(null, true);
+    if (hasLoopbackInAllowed && isLoopbackOrigin(origin)) return callback(null, true);
+    if (!origin || expandedAllowed.includes(origin)) return callback(null, true);
     return callback(new Error("CORS origin bloqueada"));
   };
+}
+
+function localhostPair(origin) {
+  const value = String(origin || "").trim();
+  const localhostMatch = value.match(/^http:\/\/localhost(?::(\d+))?$/i);
+  if (localhostMatch) {
+    const port = localhostMatch[1] ? `:${localhostMatch[1]}` : "";
+    return `http://127.0.0.1${port}`;
+  }
+
+  const ipMatch = value.match(/^http:\/\/127\.0\.0\.1(?::(\d+))?$/i);
+  if (ipMatch) {
+    const port = ipMatch[1] ? `:${ipMatch[1]}` : "";
+    return `http://localhost${port}`;
+  }
+
+  return "";
+}
+
+function isLoopbackOrigin(origin) {
+  const value = String(origin || "").trim();
+  return /^http:\/\/localhost(?::\d+)?$/i.test(value) || /^http:\/\/127\.0\.0\.1(?::\d+)?$/i.test(value);
 }
 
 async function initDb() {
@@ -639,8 +680,31 @@ function buildJarvisContext(state, referenceDate) {
   const healthLogs = safeState.healthLogs && typeof safeState.healthLogs === "object" ? safeState.healthLogs : {};
   const jarvisHistory = Array.isArray(safeState.jarvisHistory) ? safeState.jarvisHistory : [];
 
-  const refDate = referenceDate || null;
-  const monthKey = refDate ? refDate.slice(0, 7) : "";
+  const candidateRefDate = String(referenceDate || "").trim();
+  const refDate = /^\d{4}-\d{2}-\d{2}$/.test(candidateRefDate)
+    ? candidateRefDate
+    : new Date().toISOString().slice(0, 10);
+  const monthKey = refDate.slice(0, 7);
+
+  const tasksOnReferenceDate = tasks
+    .filter((task) => task?.date === refDate)
+    .sort((a, b) => {
+      const doneDiff = Number(Boolean(a?.done)) - Number(Boolean(b?.done));
+      if (doneDiff !== 0) return doneDiff;
+      return Number(a?.sortOrder || 0) - Number(b?.sortOrder || 0);
+    });
+
+  const pendingToday = tasksOnReferenceDate.filter((task) => !task?.done);
+  const doneToday = tasksOnReferenceDate.filter((task) => Boolean(task?.done));
+  const overdueTasks = tasks
+    .filter((task) => task?.date && task.date < refDate && !task?.done)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(0, 30);
+
+  const upcomingTasks = tasks
+    .filter((task) => task?.date && task.date > refDate && !task?.done)
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(0, 40);
 
   const habitStatusOnRefDate = habits.map((habit) => ({
     id: habit.id,
@@ -652,8 +716,29 @@ function buildJarvisContext(state, referenceDate) {
 
   return {
     referenceDate: refDate,
-    todayTasks: tasks.filter((task) => task?.date === refDate).slice(0, 60),
+    todayTasks: tasksOnReferenceDate.slice(0, 80),
     recentTasks: tasks.slice(-120),
+    taskFocus: {
+      pendingTodayCount: pendingToday.length,
+      doneTodayCount: doneToday.length,
+      pendingToday: pendingToday.slice(0, 40).map((task) => ({
+        title: String(task?.title || ""),
+        date: String(task?.date || refDate),
+        done: Boolean(task?.done),
+        sortOrder: Number(task?.sortOrder || 0)
+      })),
+      overdueCount: overdueTasks.length,
+      overdue: overdueTasks.slice(0, 20).map((task) => ({
+        title: String(task?.title || ""),
+        date: String(task?.date || ""),
+        done: false
+      })),
+      upcoming: upcomingTasks.slice(0, 20).map((task) => ({
+        title: String(task?.title || ""),
+        date: String(task?.date || ""),
+        done: false
+      }))
+    },
     habitStatusOnReferenceDate: habitStatusOnRefDate,
     recentTransactions: transactions.slice(-200),
     healthGoals: safeState.healthGoals || null,
@@ -675,7 +760,7 @@ function signToken(user) {
       role: user.role || "user"
     },
     jwtSecret,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+    { expiresIn: process.env.JWT_EXPIRES_IN || "45d" }
   );
 }
 

@@ -6,6 +6,7 @@
   --text: #25282f;
   --muted: #66758a;
   --accent: #2f3137;
+  --accent-contrast: #f6f7f8;
   --ok: #1f9d62;
   --bad: #cc4f4f;
   --danger: #8e2b2b;
@@ -17,6 +18,16 @@
   --shadow: 0 10px 28px rgba(23, 26, 33, 0.08);
 }
 
+body.theme-light {
+  --bg: #ececef;
+  --panel: #f6f7f8;
+  --card: #ffffff;
+  --line: #d8dce2;
+  --text: #25282f;
+  --muted: #66758a;
+  --shadow: 0 10px 28px rgba(23, 26, 33, 0.08);
+}
+
 body.theme-dark {
   --bg: #111419;
   --panel: #1a2028;
@@ -24,103 +35,11 @@ body.theme-dark {
   --line: #313b49;
   --text: #ecf0f7;
   --muted: #98a2b3;
-  --accent: #f0f3f8;
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
   --danger: #9b2b2b;
   --danger-text: #ffdede;
-  --check-accent: #6b7ea2;
   --money-in-color: #36c57e;
   --money-out-color: #ff6f6f;
-}
-
-body.theme-pastel-pink {
-  --bg: #fff3f7;
-  --panel: #ffe8ef;
-  --card: #ffffff;
-  --line: #f2cbd8;
-  --text: #3b2b34;
-  --muted: #8f6f7d;
-  --accent: #d8749c;
-  --ok: #3baf7a;
-  --bad: #c7516c;
-  --shadow: 0 10px 24px rgba(216, 116, 156, 0.18);
-  --danger: #c45f84;
-  --danger-text: #fff2f7;
-  --check-accent: #6f7c98;
-  --money-in-color: #3baf7a;
-  --money-out-color: #c7516c;
-}
-
-body.theme-pastel-green {
-  --bg: #eefaf0;
-  --panel: #def4e3;
-  --card: #ffffff;
-  --line: #bfdfc9;
-  --text: #24362a;
-  --muted: #5f7f68;
-  --accent: #4fa46b;
-  --ok: #2f9a57;
-  --bad: #b55151;
-  --shadow: 0 10px 24px rgba(79, 164, 107, 0.16);
-  --danger: #8c4e4e;
-  --danger-text: #fff2f2;
-  --check-accent: #5f738f;
-  --money-in-color: #2f9a57;
-  --money-out-color: #b55151;
-}
-
-body.theme-pastel-blue {
-  --bg: #eef6ff;
-  --panel: #e0eeff;
-  --card: #ffffff;
-  --line: #c2d8f7;
-  --text: #24344a;
-  --muted: #5f7696;
-  --accent: #5a8fd8;
-  --ok: #3a9b76;
-  --bad: #b55555;
-  --shadow: 0 10px 24px rgba(90, 143, 216, 0.16);
-  --danger: #965f6e;
-  --danger-text: #fff2f5;
-  --check-accent: #5a6f90;
-  --money-in-color: #3a9b76;
-  --money-out-color: #b55555;
-}
-
-body.theme-pastel-purple {
-  --bg: #f5efff;
-  --panel: #ece1ff;
-  --card: #ffffff;
-  --line: #d6c7f2;
-  --text: #352b45;
-  --muted: #7a6a96;
-  --accent: #9a79d8;
-  --ok: #3a9b76;
-  --bad: #b55555;
-  --shadow: 0 10px 24px rgba(154, 121, 216, 0.16);
-  --danger: #9c5f8f;
-  --danger-text: #fff2fc;
-  --check-accent: #5d6b87;
-  --money-in-color: #3a9b76;
-  --money-out-color: #b55555;
-}
-
-body.theme-black-red {
-  --bg: #09090b;
-  --panel: #131216;
-  --card: #17161c;
-  --line: #2a2731;
-  --text: #f4f3f8;
-  --muted: #b2aabf;
-  --accent: #ff3b52;
-  --ok: #30b872;
-  --bad: #ff3b52;
-  --shadow: 0 12px 34px rgba(0, 0, 0, 0.45);
-  --danger: #ff3b52;
-  --danger-text: #fff3f6;
-  --check-accent: #ff5266;
-  --money-in-color: #30b872;
-  --money-out-color: #ff5f73;
 }
 
 * { box-sizing: border-box; }
@@ -140,6 +59,40 @@ p { margin: 0; }
 input, select, textarea, button { font: inherit; }
 
 .hidden { display: none !important; }
+
+.boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.boot-card {
+  width: min(460px, 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  padding: 24px;
+  display: grid;
+  gap: 12px;
+  text-align: center;
+}
+
+.boot-spinner {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto;
+  border-radius: 999px;
+  border: 3px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-top-color: var(--accent);
+  animation: boot-spin 0.9s linear infinite;
+}
+
+@keyframes boot-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 .login-screen {
   min-height: 100vh;
@@ -237,7 +190,7 @@ input, select, textarea, button { font: inherit; }
 
 .menu-btn.active {
   background: var(--accent);
-  color: var(--panel);
+  color: var(--accent-contrast);
 }
 
 .menu-icon {
@@ -363,7 +316,7 @@ input, select, textarea {
 .btn {
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: var(--panel);
+  color: var(--accent-contrast);
   border-radius: 10px;
   padding: 10px 14px;
   font-weight: 700;
@@ -548,7 +501,7 @@ th {
 
 .subtab.active {
   background: var(--accent);
-  color: var(--panel);
+  color: var(--accent-contrast);
   border-color: var(--accent);
 }
 
