@@ -3,6 +3,7 @@
   --panel: #f6f7f8;
   --card: #ffffff;
   --line: #d8dce2;
+  --bg-glow: rgba(170, 179, 194, 0.18);
   --text: #25282f;
   --muted: #66758a;
   --accent: #2f3137;
@@ -23,18 +24,20 @@ body.theme-light {
   --panel: #f6f7f8;
   --card: #ffffff;
   --line: #d8dce2;
+  --bg-glow: rgba(170, 179, 194, 0.18);
   --text: #25282f;
   --muted: #66758a;
   --shadow: 0 10px 28px rgba(23, 26, 33, 0.08);
 }
 
 body.theme-dark {
-  --bg: #111419;
-  --panel: #1a2028;
-  --card: #1f2530;
-  --line: #313b49;
-  --text: #ecf0f7;
-  --muted: #98a2b3;
+  --bg: #161617;
+  --panel: #1c1c1e;
+  --card: #232326;
+  --line: #343439;
+  --bg-glow: rgba(156, 149, 136, 0.14);
+  --text: #f2f2f3;
+  --muted: #acadb3;
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
   --danger: #9b2b2b;
   --danger-text: #ffdede;
@@ -47,7 +50,7 @@ body {
   margin: 0;
   font-family: "Manrope", sans-serif;
   color: var(--text);
-  background: radial-gradient(circle at 4% 6%, rgba(170, 179, 194, 0.18), transparent 40%), var(--bg);
+  background: radial-gradient(circle at 4% 6%, var(--bg-glow), transparent 40%), var(--bg);
 }
 
 h1, h2, h3 {
