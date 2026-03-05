@@ -66,7 +66,12 @@ app.post("/api/auth/login", async (req, res) => {
     );
 
     const user = result.rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    if (!user) {
+      return res.status(401).json({ error: "Email ou senha incorreto" });
+    }
+
+    const passwordMatches = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatches) {
       return res.status(401).json({ error: "Email ou senha incorreto" });
     }
 
@@ -110,7 +115,7 @@ app.put("/api/auth/profile", authRequired, async (req, res) => {
     }
 
     if (password) {
-      const hash = bcrypt.hashSync(password, 10);
+      const hash = await bcrypt.hash(password, 10);
       await pool.query(
         "UPDATE users SET name = $1, email = $2, password_hash = $3 WHERE id = $4",
         [name, email, hash, req.user.id]
@@ -166,7 +171,7 @@ app.post("/api/admin/users", authRequired, adminRequired, async (req, res) => {
     const exists = await pool.query("SELECT id FROM users WHERE email = $1 LIMIT 1", [email]);
     if (exists.rows.length) return res.status(409).json({ error: "Email já cadastrado" });
 
-    const hash = bcrypt.hashSync(password, 10);
+    const hash = await bcrypt.hash(password, 10);
     const result = await pool.query(
       "INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role, created_at",
       [name, email, hash, role]
@@ -218,7 +223,7 @@ app.put("/api/admin/users/:id", authRequired, adminRequired, async (req, res) =>
 
     if (password) {
       sets.push(`password_hash = $${idx++}`);
-      values.push(bcrypt.hashSync(password, 10));
+      values.push(await bcrypt.hash(password, 10));
     }
 
     if (["admin", "user"].includes(role)) {

@@ -80,6 +80,7 @@ const refs = {
   habitCalendarLabel: document.getElementById("habitCalendarLabel"),
   habitForm: document.getElementById("habitForm"),
   habitName: document.getElementById("habitName"),
+  habitFrequency: document.getElementById("habitFrequency"),
   habitGoal: document.getElementById("habitGoal"),
   habitGridHead: document.getElementById("habitGridHead"),
   habitGridBody: document.getElementById("habitGridBody"),
@@ -172,6 +173,7 @@ const refs = {
   habitEditModal: document.getElementById("habitEditModal"),
   habitEditForm: document.getElementById("habitEditForm"),
   habitEditName: document.getElementById("habitEditName"),
+  habitEditFrequency: document.getElementById("habitEditFrequency"),
   habitEditGoal: document.getElementById("habitEditGoal"),
   habitEditCancelBtn: document.getElementById("habitEditCancelBtn"),
 
@@ -205,9 +207,8 @@ const refs = {
 };
 
 const chartInstances = {};
-const now = new Date();
-const todayKey = isoDate(now);
-const currentMonthKey = todayKey.slice(0, 7);
+let todayKey = isoDate(new Date());
+let currentMonthKey = todayKey.slice(0, 7);
 
 const state = loadState();
 let authToken = "";
@@ -226,6 +227,7 @@ let editingTaskId = "";
 let editingAdminUserId = 0;
 let confirmActionHandler = null;
 let confirmBusy = false;
+let dateWatcherTimer = null;
 const THEME_MODE_ORDER = ["system", "dark", "light"];
 const THEME_MODES = ["system", "light", "dark"];
 const THEME_ACCENTS = ["neutral", "red", "blue", "green", "yellow", "orange", "pink", "purple"];
@@ -516,9 +518,70 @@ let currentUser = null;
 let adminUsers = [];
 let currentStateOwnerId = 0;
 let systemThemeListenerBound = false;
+
+function applyUiMonthRollover(ui, { forceCurrent = false } = {}) {
+  const safeUi = ui && typeof ui === "object" ? ui : {};
+  const lastMonthSync = String(safeUi.lastMonthSync || "");
+  const shouldRollToCurrentMonth = forceCurrent || !lastMonthSync || lastMonthSync !== currentMonthKey;
+  if (shouldRollToCurrentMonth) {
+    safeUi.dashboardMonth = currentMonthKey;
+    safeUi.financeMonthFilter = currentMonthKey;
+  }
+  safeUi.lastMonthSync = currentMonthKey;
+  return safeUi;
+}
+
+function syncDateContext({ alignUiMonth = false, alignUiDay = false } = {}) {
+  const previousToday = todayKey;
+  const previousMonth = currentMonthKey;
+  const nextToday = isoDate(new Date());
+  const nextMonth = nextToday.slice(0, 7);
+  const dayChanged = previousToday !== nextToday;
+  const monthChanged = previousMonth !== nextMonth;
+
+  todayKey = nextToday;
+  currentMonthKey = nextMonth;
+
+  if (state?.ui && typeof state.ui === "object") {
+    const shouldSyncDashboardMonth = alignUiMonth || !state.ui.dashboardMonth || (monthChanged && state.ui.dashboardMonth === previousMonth);
+    if (shouldSyncDashboardMonth) state.ui.dashboardMonth = nextMonth;
+
+    const shouldSyncFinanceMonth = alignUiMonth || !state.ui.financeMonthFilter || (monthChanged && state.ui.financeMonthFilter === previousMonth);
+    if (shouldSyncFinanceMonth) state.ui.financeMonthFilter = nextMonth;
+
+    if (alignUiMonth || monthChanged || !state.ui.financeYearFilter) {
+      state.ui.financeYearFilter = String(new Date().getFullYear());
+    }
+
+    const shouldSyncHabitDay = alignUiDay || !state.ui.habitTaskDate || (dayChanged && state.ui.habitTaskDate === previousToday);
+    if (shouldSyncHabitDay) state.ui.habitTaskDate = nextToday;
+
+    const shouldSyncJournalDay = alignUiDay || !state.ui.journalDate || (dayChanged && state.ui.journalDate === previousToday);
+    if (shouldSyncJournalDay) state.ui.journalDate = nextToday;
+
+    state.ui = applyUiMonthRollover(state.ui, { forceCurrent: alignUiMonth });
+  }
+
+  return { dayChanged, monthChanged, previousToday, previousMonth };
+}
+
+function startDateWatcher() {
+  if (dateWatcherTimer) clearInterval(dateWatcherTimer);
+  dateWatcherTimer = setInterval(() => {
+    const context = syncDateContext();
+    if (!context.dayChanged && !context.monthChanged) return;
+    refs.todayChip.textContent = formatDate(todayKey);
+    syncHabitFrequencyInputs();
+    hydrateMonthFilters();
+    renderAll();
+    persist();
+  }, 60 * 1000);
+}
+
 bootstrap();
 
 async function bootstrap() {
+  syncDateContext({ alignUiMonth: true, alignUiDay: true });
   showBootstrapLoading();
   refs.todayChip.textContent = formatDate(todayKey);
   refs.healthDate.value = todayKey;
@@ -541,8 +604,10 @@ async function bootstrap() {
 
   buildMenu();
   bindEvents();
+  startDateWatcher();
   applyTheme();
   hydrateCategorySelects();
+  syncHabitFrequencyInputs();
   hydrateMonthFilters();
 
   const session = loadSession();
@@ -570,8 +635,7 @@ async function restoreSession(session) {
   if (restoreResult.user) {
     applyLoggedUser(restoreResult.user);
     saveSession({ token: authToken, user: restoreResult.user });
-    await pullRemoteState();
-    if (isAdminUser()) await loadAdminUsers();
+    queuePostAuthHydration({ includeAdmin: true });
     return true;
   }
 
@@ -581,12 +645,25 @@ async function restoreSession(session) {
   }
 
   if (session.user) {
-    await pullRemoteState();
-    if (isAdminUser()) void loadAdminUsers();
+    queuePostAuthHydration({ includeAdmin: true });
     return true;
   }
 
   return false;
+}
+
+function queuePostAuthHydration({ includeAdmin = false } = {}) {
+  void (async () => {
+    try {
+      await pullRemoteState();
+      if (includeAdmin && isAdminUser()) await loadAdminUsers();
+      syncHabitFrequencyInputs();
+      hydrateMonthFilters();
+      renderAll();
+    } catch (_error) {
+      // keep local state if remote hydration fails
+    }
+  })();
 }
 
 async function fetchCurrentUserWithRetry(maxAttempts = 3) {
@@ -664,6 +741,8 @@ function bindEvents() {
   refs.habitCalendarPrev.addEventListener("click", () => shiftHabitDate(-1));
   refs.habitCalendarNext.addEventListener("click", () => shiftHabitDate(1));
   refs.habitTaskForm.addEventListener("submit", onTaskAddByDate);
+  refs.habitFrequency?.addEventListener("change", syncHabitFrequencyInputs);
+  refs.habitGoal?.addEventListener("input", sanitizeHabitGoalInput);
   refs.habitForm.addEventListener("submit", onHabitSubmit);
   refs.habitGridBody.addEventListener("change", onHabitGridChange);
   refs.habitGridBody.addEventListener("click", onHabitGridClick);
@@ -751,6 +830,8 @@ function bindEvents() {
   }
 
   refs.habitEditForm.addEventListener("submit", onHabitEditSubmit);
+  refs.habitEditFrequency?.addEventListener("change", syncHabitFrequencyInputs);
+  refs.habitEditGoal?.addEventListener("input", sanitizeHabitGoalInput);
   refs.habitEditCancelBtn.addEventListener("click", closeHabitEditModal);
   refs.habitEditModal.addEventListener("click", (event) => {
     if (event.target === refs.habitEditModal) closeHabitEditModal();
@@ -804,6 +885,7 @@ async function onLoginSubmit(event) {
   clearTimeout(saveTimer);
   const email = refs.loginUser.value.trim();
   const password = refs.loginPass.value;
+  const submitBtn = refs.loginForm.querySelector('button[type="submit"]');
 
   if (!email || !password) {
     refs.loginError.textContent = "Email ou senha incorreto";
@@ -811,6 +893,11 @@ async function onLoginSubmit(event) {
   }
 
   try {
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Entrando...";
+    }
+
     const data = await apiRequest("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password })
@@ -825,13 +912,11 @@ async function onLoginSubmit(event) {
     saveSession({ token: data.token, user: data.user || null });
     refs.loginError.textContent = "";
     hydrateStateFromRemote(defaultState());
-    currentStateOwnerId = Number(data?.user?.id || 0);
-    await pullRemoteState();
     applyLoggedUser(data.user || null);
-    if (isAdminUser()) await loadAdminUsers();
     refs.loginForm.reset();
     showApp();
     renderAll();
+    queuePostAuthHydration({ includeAdmin: true });
   } catch (error) {
     const status = Number(error?.status || 0);
     if (status === 401 || status === 403) {
@@ -843,6 +928,11 @@ async function onLoginSubmit(event) {
       return;
     }
     refs.loginError.textContent = "Não foi possível fazer login agora. Tente novamente.";
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Entrar";
+    }
   }
 }
 
@@ -1128,6 +1218,8 @@ function buildMenu() {
 }
 
 function renderAll() {
+  syncDateContext();
+  refs.todayChip.textContent = formatDate(todayKey);
   buildMenu();
   renderActiveView();
   renderDashboard();
@@ -1558,7 +1650,91 @@ function normalizeActionDate(value) {
   return todayKey;
 }
 
+function normalizeHabitFrequencyType(value) {
+  return String(value || "").trim().toLowerCase() === "daily" ? "daily" : "monthly";
+}
+
+function normalizeHabitTimes(value) {
+  return clamp(Math.round(Number(value || 0)), 1, 31);
+}
+
+function normalizeHabitFrequency(frequency, fallbackGoal = 20) {
+  const safe = frequency && typeof frequency === "object" ? frequency : {};
+  const type = normalizeHabitFrequencyType(safe.type);
+  const fallbackTimes = Number.isFinite(Number(fallbackGoal)) ? Number(fallbackGoal) : 20;
+  const times = normalizeHabitTimes(Number.isFinite(Number(safe.times)) ? Number(safe.times) : fallbackTimes);
+  return { type, times };
+}
+
+function goalForHabitFrequency(frequency, monthKey = currentMonthKey) {
+  if (normalizeHabitFrequencyType(frequency?.type) === "daily") return daysOfMonth(monthKey).length;
+  return normalizeHabitTimes(frequency?.times || 1);
+}
+
+function habitFrequencyOf(habit) {
+  const fallbackGoal = Number(habit?.goal || 20);
+  return normalizeHabitFrequency(habit?.frequency, fallbackGoal);
+}
+
+function habitGoalForMonth(habit, monthKey = currentMonthKey) {
+  return goalForHabitFrequency(habitFrequencyOf(habit), monthKey);
+}
+
+function habitFrequencyLabel(habit) {
+  const frequency = habitFrequencyOf(habit);
+  return frequency.type === "daily" ? "Todos os dias" : `${frequency.times}x/mês`;
+}
+
+function normalizeHabits(habits) {
+  if (!Array.isArray(habits)) return [];
+  return habits.map((habit) => {
+    const safe = habit && typeof habit === "object" ? habit : {};
+    const fallbackGoal = Number(safe.goal || 20);
+    const frequency = normalizeHabitFrequency(safe.frequency, fallbackGoal);
+    const goal = goalForHabitFrequency(frequency, currentMonthKey);
+    return {
+      id: String(safe.id || crypto.randomUUID()),
+      name: String(safe.name || "Hábito"),
+      goal,
+      frequency,
+      logs: safe.logs && typeof safe.logs === "object" ? safe.logs : {}
+    };
+  });
+}
+
+function syncHabitGoalsForCurrentMonth() {
+  state.habits = normalizeHabits(state.habits);
+  state.habits.forEach((habit) => {
+    habit.goal = habitGoalForMonth(habit, currentMonthKey);
+  });
+}
+
+function syncHabitFrequencyInput(selectEl, goalEl) {
+  if (!(selectEl instanceof HTMLSelectElement) || !(goalEl instanceof HTMLInputElement)) return;
+  const type = normalizeHabitFrequencyType(selectEl.value);
+  if (type === "daily") {
+    goalEl.value = String(daysOfMonth(currentMonthKey).length);
+    goalEl.disabled = true;
+    return;
+  }
+  goalEl.disabled = false;
+  goalEl.value = String(normalizeHabitTimes(goalEl.value || 5));
+}
+
+function syncHabitFrequencyInputs() {
+  syncHabitFrequencyInput(refs.habitFrequency, refs.habitGoal);
+  syncHabitFrequencyInput(refs.habitEditFrequency, refs.habitEditGoal);
+}
+
+function sanitizeHabitGoalInput(event) {
+  const target = event?.target;
+  if (!(target instanceof HTMLInputElement) || target.disabled) return;
+  target.value = String(normalizeHabitTimes(target.value || 1));
+}
+
 function renderHabits() {
+  syncHabitGoalsForCurrentMonth();
+  syncHabitFrequencyInputs();
   renderTaskLists();
   renderHabitGrid();
   renderHabitChart();
@@ -1567,20 +1743,28 @@ function renderHabits() {
 function onHabitSubmit(event) {
   event.preventDefault();
   const name = refs.habitName.value.trim();
-  const goal = Number(refs.habitGoal.value);
+  const frequencyType = normalizeHabitFrequencyType(refs.habitFrequency?.value);
+  const frequency = normalizeHabitFrequency(
+    { type: frequencyType, times: Number(refs.habitGoal.value) },
+    Number(refs.habitGoal.value) || 5
+  );
+  const goal = goalForHabitFrequency(frequency, currentMonthKey);
   if (!name || goal < 1) return;
+  const frequencyText = frequency.type === "daily" ? "todos os dias" : `${frequency.times}x por mês`;
 
-  openConfirmModal('Adicionar hábito "' + name + '" com meta ' + goal + ' dias?', () => {
-    state.habits.push({ id: crypto.randomUUID(), name, goal, logs: {} });
+  openConfirmModal('Adicionar hábito "' + name + '" (' + frequencyText + ')?', () => {
+    state.habits.push({ id: crypto.randomUUID(), name, goal, frequency, logs: {} });
     refs.habitForm.reset();
-    refs.habitGoal.value = "20";
+    if (refs.habitFrequency) refs.habitFrequency.value = "monthly";
+    if (refs.habitGoal) refs.habitGoal.value = "5";
+    syncHabitFrequencyInputs();
     persistAndRender();
   });
 }
 
 function renderHabitGrid() {
   const days = daysOfMonth(currentMonthKey);
-  const headCells = ["<th class='habit-name'>Hábito</th>", "<th class='goal-col'>Meta</th>"];
+  const headCells = ["<th class='habit-name'>Hábito</th>", "<th class='freq-col'>Frequência</th>", "<th class='goal-col'>Meta</th>"];
   days.forEach((d) => headCells.push(`<th class='check-col'>${Number(d.slice(-2))}</th>`));
   headCells.push("<th class='exec-col'>Execução</th>");
   headCells.push("<th class='progress-col'>Progresso</th>");
@@ -1588,13 +1772,18 @@ function renderHabitGrid() {
   refs.habitGridHead.innerHTML = `<tr>${headCells.join("")}</tr>`;
 
   refs.habitGridBody.innerHTML = state.habits.map((habit) => {
+    const goal = habitGoalForMonth(habit, currentMonthKey);
     const done = completedInMonthForHabit(habit, currentMonthKey);
-    const ratio = habit.goal ? clamp((done / habit.goal) * 100, 0, 100) : 0;
-    const cells = [`<td class='habit-name'>${escapeHtml(habit.name)}</td>`, `<td class='goal-col'>${habit.goal}</td>`];
+    const ratio = goal ? clamp((done / goal) * 100, 0, 100) : 0;
+    const cells = [
+      `<td class='habit-name'>${escapeHtml(habit.name)}</td>`,
+      `<td class='freq-col'>${habitFrequencyLabel(habit)}</td>`,
+      `<td class='goal-col'>${goal}</td>`
+    ];
     days.forEach((date) => {
       cells.push(`<td class='check-col'><input type='checkbox' data-habit-id='${habit.id}' data-date='${date}' ${habit.logs[date] ? "checked" : ""}></td>`);
     });
-    cells.push(`<td class='exec-col'><strong>${done}/${habit.goal}</strong></td>`);
+    cells.push(`<td class='exec-col'><strong>${done}/${goal}</strong></td>`);
     cells.push(`<td class='progress-col'><div class='progress'><div style='width:${ratio}%'></div></div></td>`);
     cells.push(`<td class='action-col'><button class='btn ghost' type='button' data-habit-edit='${habit.id}'>Editar</button> <button class='btn danger' type='button' data-habit-delete='${habit.id}'>Excluir</button></td>`);
     return `<tr>${cells.join("")}</tr>`;
@@ -1606,6 +1795,7 @@ function onHabitGridChange(event) {
   if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") return;
   const habit = state.habits.find((h) => h.id === target.dataset.habitId);
   if (!habit) return;
+  if (!habit.logs || typeof habit.logs !== "object") habit.logs = {};
   if (target.checked) habit.logs[target.dataset.date] = true;
   else delete habit.logs[target.dataset.date];
   persistAndRender();
@@ -2247,7 +2437,13 @@ function findHabitByName(name) {
 function markHabitByDate(name, dateKey = todayKey) {
   let habit = findHabitByName(name);
   if (!habit) {
-    habit = { id: crypto.randomUUID(), name, goal: 20, logs: {} };
+    habit = {
+      id: crypto.randomUUID(),
+      name,
+      goal: 20,
+      frequency: { type: "monthly", times: 20 },
+      logs: {}
+    };
     state.habits.push(habit);
   }
   habit.logs[dateKey] = true;
@@ -2430,9 +2626,12 @@ function applyTheme() {
 function openHabitEditModal(habitId) {
   const habit = state.habits.find((h) => h.id === habitId);
   if (!habit) return;
+  const frequency = habitFrequencyOf(habit);
   editingHabitId = habit.id;
   refs.habitEditName.value = habit.name;
-  refs.habitEditGoal.value = String(habit.goal);
+  if (refs.habitEditFrequency) refs.habitEditFrequency.value = frequency.type;
+  refs.habitEditGoal.value = String(frequency.type === "daily" ? daysOfMonth(currentMonthKey).length : frequency.times);
+  syncHabitFrequencyInputs();
   refs.habitEditModal.classList.remove("hidden");
 }
 
@@ -2446,9 +2645,15 @@ function onHabitEditSubmit(event) {
   const habit = state.habits.find((h) => h.id === editingHabitId);
   if (!habit) return;
   const name = refs.habitEditName.value.trim();
-  const goal = Number(refs.habitEditGoal.value);
+  const frequencyType = normalizeHabitFrequencyType(refs.habitEditFrequency?.value);
+  const frequency = normalizeHabitFrequency(
+    { type: frequencyType, times: Number(refs.habitEditGoal.value) },
+    Number(refs.habitEditGoal.value) || 5
+  );
+  const goal = goalForHabitFrequency(frequency, currentMonthKey);
   if (!name || goal < 1) return;
   habit.name = name;
+  habit.frequency = frequency;
   habit.goal = goal;
   closeHabitEditModal();
   persistAndRender();
@@ -2632,7 +2837,8 @@ function defaultState() {
       financeYearFilter: String(new Date().getFullYear()),
       financeCustomStart: "",
       financeCustomEnd: "",
-      journalDate: todayKey
+      journalDate: todayKey,
+      lastMonthSync: currentMonthKey
     }
   };
 }
@@ -2647,13 +2853,13 @@ function loadState() {
       ...base,
       ...parsed,
       settings: normalizeThemeSettings({ ...base.settings, ...(parsed.settings || {}) }),
-      ui: { ...base.ui, ...(parsed.ui || {}) },
+      ui: applyUiMonthRollover({ ...base.ui, ...(parsed.ui || {}) }),
       healthGoals: { ...base.healthGoals, ...(parsed.healthGoals || {}) },
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks.map((task) => ({
         ...task,
         sortOrder: Number(task?.sortOrder || 0)
       })) : [],
-      habits: Array.isArray(parsed.habits) ? parsed.habits : [],
+      habits: normalizeHabits(parsed.habits),
       healthLogs: parsed.healthLogs && typeof parsed.healthLogs === "object" ? parsed.healthLogs : {},
       transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
       budgets: Array.isArray(parsed.budgets) ? parsed.budgets : [],
@@ -2735,13 +2941,13 @@ function hydrateStateFromRemote(remote) {
     ...base,
     ...remote,
     settings: normalizeThemeSettings({ ...base.settings, ...(remote.settings || {}) }),
-    ui: { ...state.ui, ...(remote.ui || {}) },
+    ui: applyUiMonthRollover({ ...state.ui, ...(remote.ui || {}) }),
     healthGoals: { ...base.healthGoals, ...(remote.healthGoals || {}) },
     tasks: Array.isArray(remote.tasks) ? remote.tasks.map((task) => ({
       ...task,
       sortOrder: Number(task?.sortOrder || 0)
     })) : [],
-    habits: Array.isArray(remote.habits) ? remote.habits : [],
+    habits: normalizeHabits(remote.habits),
     healthLogs: remote.healthLogs && typeof remote.healthLogs === "object" ? remote.healthLogs : {},
     transactions: Array.isArray(remote.transactions) ? remote.transactions : [],
     budgets: Array.isArray(remote.budgets) ? remote.budgets : [],

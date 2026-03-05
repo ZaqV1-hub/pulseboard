@@ -127,7 +127,11 @@
             <h3>Novo hábito</h3>
             <form id="habitForm" class="inline-form">
               <input id="habitName" type="text" placeholder="Nome do hábito" required>
-              <input id="habitGoal" type="number" min="1" max="31" value="20" required>
+              <select id="habitFrequency" required>
+                <option value="monthly" selected>X vezes no mês</option>
+                <option value="daily">Todos os dias</option>
+              </select>
+              <input id="habitGoal" type="number" min="1" max="31" value="5" required>
               <button class="btn" type="submit">Adicionar</button>
             </form>
             <div class="table-wrap">
@@ -398,6 +402,12 @@
     <form class="modal-card" id="habitEditForm">
       <h3>Editar hábito</h3>
       <label>Nome do hábito<input id="habitEditName" type="text" required></label>
+      <label>Frequência
+        <select id="habitEditFrequency" required>
+          <option value="monthly">X vezes no mês</option>
+          <option value="daily">Todos os dias</option>
+        </select>
+      </label>
       <label>Meta mensal (dias)<input id="habitEditGoal" type="number" min="1" max="31" required></label>
       <div class="modal-actions">
         <button class="btn ghost" id="habitEditCancelBtn" type="button">Cancelar</button>
